@@ -160,6 +160,56 @@ def export_csv(leads: list[Lead], output: Path | TextIO) -> int:
     return len(rows)
 
 
+def export_excel(leads: list[Lead], output: Path) -> int:
+    """Export leads to Excel file with auto-fitted column widths."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+
+    rows = [lead_to_row(lead) for lead in leads]
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Leads"
+
+    # Write header
+    for col_idx, col_name in enumerate(CSV_COLUMNS, 1):
+        ws.cell(row=1, column=col_idx, value=col_name)
+
+    # Write data rows
+    for row_idx, row_data in enumerate(rows, 2):
+        for col_idx, col_name in enumerate(CSV_COLUMNS, 1):
+            ws.cell(row=row_idx, column=col_idx, value=row_data.get(col_name, ""))
+
+    # Auto-fit column widths
+    for col_idx, col_name in enumerate(CSV_COLUMNS, 1):
+        column_letter = get_column_letter(col_idx)
+
+        # Calculate max width from header and data
+        max_length = len(col_name)
+        for row_data in rows:
+            cell_value = str(row_data.get(col_name, ""))
+            # Limit cell length consideration to avoid super-wide columns
+            cell_length = min(len(cell_value), 50)
+            max_length = max(max_length, cell_length)
+
+        # Add a little padding and set width
+        adjusted_width = max_length + 2
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    # Style header row (bold)
+    from openpyxl.styles import Font
+
+    for col_idx in range(1, len(CSV_COLUMNS) + 1):
+        ws.cell(row=1, column=col_idx).font = Font(bold=True)
+
+    wb.save(output)
+    return len(rows)
+
+
 def export_json(leads: list[Lead], output: Path) -> int:
     """Export leads to JSON file (canonical format)."""
     output.parent.mkdir(parents=True, exist_ok=True)

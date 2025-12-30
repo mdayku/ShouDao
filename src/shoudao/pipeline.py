@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .advisor import Advisor
 from .dedupe import dedupe_leads, score_all_leads
-from .exporter import export_csv, export_json, generate_report
+from .exporter import export_csv, export_excel, export_json, generate_report
 from .extractor import Extractor
 from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
 from .models import Lead, RunConfig, RunResult
@@ -173,6 +173,7 @@ class Pipeline:
             sources_path = run_dir / "sources.json"
 
             export_csv(leads, csv_path)
+            export_excel(leads, run_dir / "leads.xlsx")
             export_json(leads, json_path)
             generate_report(result, report_path)
             sources_log.save(sources_path)
