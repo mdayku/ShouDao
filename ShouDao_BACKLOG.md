@@ -297,6 +297,25 @@ Benefits of migration:
 | Industry deduplication | ⏳ TODO | Lowercase + synonym map |
 | Retry/backoff for search API 429s | ⏳ TODO | Add to SerperProvider |
 | Per-run request budget | ⏳ TODO | max_search_queries, max_pages configs |
+| Rate limit handling for gpt-4o | ⏳ TODO | Add backoff for 429 errors |
+
+---
+
+## Best Practices Learned
+
+### Prompt Separation (Critical)
+
+**Problem:** Conflating buyer discovery with seller intent causes exporter leakage.
+
+**Solution:** Separate concerns into two phases:
+
+| Phase | Purpose | Example |
+|-------|---------|---------|
+| **Search prompt** | Buyer-only, geography-anchored | "Caribbean-based suppliers, installers. Exclude China exporters." |
+| **Seller context** | Post-extraction advice only | "Chinese manufacturer seeking distributors..." |
+| **Product context** | Split: search-relevant vs sales-only | Search: "windows, doors, hotels" / Sales: "MOQs, certifications" |
+
+**Result:** China leakage dropped from 1 to 0, US from 8 to 2, Contractors up from 3 to 18.
 
 ---
 
