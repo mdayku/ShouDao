@@ -123,6 +123,7 @@ class LinkedInProvider:
         max_results: int | None = None,
         job_titles: list[str] | None = None,
         locations: list[str] | None = None,
+        profile_language: str | None = "en",
         scraper_mode: str = "Short",
     ) -> list[LinkedInProfile]:
         """
@@ -133,6 +134,7 @@ class LinkedInProvider:
             max_results: Max profiles to return (default: config value)
             job_titles: List of current job titles to filter by
             locations: List of locations to filter by
+            profile_language: Profile language code (e.g., "en" for English)
             scraper_mode: "Short" (basic), "Full" (detailed), "Full + email search"
 
         Returns:
@@ -142,6 +144,10 @@ class LinkedInProvider:
 
         print(f"[LinkedIn] Searching: {keywords[:50]}...")
         print(f"[LinkedIn] Mode: {scraper_mode}, Max: {max_results}")
+        if locations:
+            print(f"[LinkedIn] Locations: {', '.join(locations)}")
+        if profile_language:
+            print(f"[LinkedIn] Profile language: {profile_language}")
 
         # Build input for HarvestAPI actor
         # See: https://apify.com/harvestapi/linkedin-profile-search
@@ -161,6 +167,10 @@ class LinkedInProvider:
         # Add location filter if provided
         if locations:
             run_input["locations"] = locations
+
+        # Add profile language filter if provided
+        if profile_language:
+            run_input["profileLanguage"] = profile_language
 
         try:
             run = self.client.actor(self.config.search_actor).call(
@@ -452,7 +462,12 @@ def linkedin_profile_to_candidate(profile: LinkedInProfile):
     """
     from datetime import UTC, datetime
 
-    from .models import AgeBand, Candidate, CandidateTier, Evidence, SalaryBand
+    from .models import Candidate, Evidence
+
+    # Get URL - handle both url and linkedinUrl field names
+    profile_url = profile.url
+    if not profile_url:
+        raise ValueError(f"Profile {profile.name} has no URL")
 
     # Build degree signal from education
     degree_signal = None
@@ -465,62 +480,65 @@ def linkedin_profile_to_candidate(profile: LinkedInProfile):
         degree_parts.append(profile.school)
         degree_signal = ", ".join(degree_parts)
 
-    # Estimate salary band from experience and title
-    salary_band = SalaryBand.UNKNOWN
+    # Estimate salary band from experience and title (Literal values)
+    salary_band = "unknown"
     if profile.years_experience:
         if profile.years_experience >= 10:
-            salary_band = SalaryBand.SENIOR
+            salary_band = "200k_plus"
         elif profile.years_experience >= 5:
-            salary_band = SalaryBand.MID
+            salary_band = "150k_200k"
         elif profile.years_experience >= 2:
-            salary_band = SalaryBand.JUNIOR
+            salary_band = "100k_150k"
         else:
-            salary_band = SalaryBand.ENTRY
+            salary_band = "under_100k"
 
-    # Estimate age band from experience
-    age_band = AgeBand.UNKNOWN
+    # Estimate age band from experience (Literal values)
+    age_band = "unknown"
     if profile.years_experience:
         # Rough estimate: experience + 22 (college graduation age)
         estimated_age = profile.years_experience + 22
         if estimated_age < 25:
-            age_band = AgeBand.YOUNG_PROFESSIONAL
-        elif estimated_age < 35:
-            age_band = AgeBand.EARLY_CAREER
-        elif estimated_age < 45:
-            age_band = AgeBand.MID_CAREER
+            age_band = "young"
+        elif estimated_age < 37:
+            age_band = "optimal"  # Gauntlet sweet spot
+        elif estimated_age < 43:
+            age_band = "mature"
         else:
-            age_band = AgeBand.SENIOR
+            age_band = "senior"
 
     # Create evidence from LinkedIn profile
     evidence = [
         Evidence(
-            url=profile.url,
+            url=profile_url,
             snippet=profile.headline or f"{profile.name} - LinkedIn",
-            retrieved_at=datetime.now(UTC),
+            fetched_at=datetime.now(UTC),
         )
     ]
 
     return Candidate(
         name=profile.name or "Unknown",
-        primary_profile=profile.url,
-        linkedin_url=profile.url,
+        primary_profile=profile_url,
+        linkedin_url=profile_url,
         github_url=None,  # Would need separate enrichment
         twitter_url=profile.twitter,
+        website_url=profile.website,
         email=profile.email,
         degree_signal=degree_signal,
+        university=profile.school,
         engineering_experience=profile.experience_summary,
         current_role=profile.current_title or profile.headline,
         current_company=profile.current_company,
-        location=profile.location,
+        years_experience=profile.years_experience,
         estimated_salary_band=salary_band,
-        estimated_age_band=age_band,
-        public_work=[],  # LinkedIn doesn't expose this
+        age_band=age_band,
+        public_repos=[],  # LinkedIn doesn't expose this
+        public_demos=[],
+        blog_posts=[],
         ai_signal_score=0.0,  # Not assessed from LinkedIn
         build_in_public_score=0.0,  # Not assessed from LinkedIn
-        overall_fit_tier=CandidateTier.C,  # Default, will be updated by scoring
+        overall_fit_tier="C",  # Default, will be updated by scoring
         why_flagged="Found via LinkedIn search",
         evidence=evidence,
         confidence=0.5,  # Default for LinkedIn sources
-        score=None,  # Will be set by scoring
-        score_contributions=None,
+        score_contributions={},
     )

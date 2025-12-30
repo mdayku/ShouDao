@@ -254,12 +254,14 @@ class TalentPipeline:
         verbose: bool = False,
         use_linkedin: bool = False,
         linkedin_mode: str = "Full",
+        locations: list[str] | None = None,
     ):
         self.prompt = prompt
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_talent_" + uuid.uuid4().hex[:6]
         self.logger = ProgressLogger(self.run_id, verbose=verbose)
         self.use_linkedin = use_linkedin
         self.linkedin_mode = linkedin_mode
+        self.locations = locations
 
     def _run_linkedin_source(
         self, max_results: int | None, result: TalentRunResult
@@ -278,6 +280,8 @@ class TalentPipeline:
             self.prompt,
             max_results=max_results or 25,
             scraper_mode=self.linkedin_mode,
+            locations=self.locations,
+            profile_language="en",  # Default to English profiles
         )
 
         print(f"  Found {len(profiles)} LinkedIn profiles")
@@ -290,8 +294,17 @@ class TalentPipeline:
             try:
                 candidate = linkedin_profile_to_candidate(profile)
                 candidates.append(candidate)
+                print(f"    Converted: {profile.name or 'Unknown'}")
             except Exception as e:
-                result.errors.append(f"Profile conversion error: {e}")
+                import traceback
+
+                tb = traceback.format_exc()
+                result.errors.append(f"Profile conversion error ({profile.name}): {e}")
+                print(f"    ERROR converting {profile.name}:")
+                # Print just the last 5 lines of traceback
+                tb_lines = tb.strip().split("\n")
+                for line in tb_lines[-5:]:
+                    print(f"      {line}")
 
         return candidates
 
@@ -441,7 +454,13 @@ def run_talent_pipeline(
     filters: dict | None = None,
     use_linkedin: bool = False,
     linkedin_mode: str = "Full",
+    locations: list[str] | None = None,
 ) -> TalentRunResult:
     """Convenience function to run a talent discovery pipeline."""
-    pipeline = TalentPipeline(prompt, use_linkedin=use_linkedin, linkedin_mode=linkedin_mode)
+    pipeline = TalentPipeline(
+        prompt,
+        use_linkedin=use_linkedin,
+        linkedin_mode=linkedin_mode,
+        locations=locations,
+    )
     return pipeline.run(output_dir=output_dir, max_results=max_results, filters=filters)

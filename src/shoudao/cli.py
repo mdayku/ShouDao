@@ -172,12 +172,20 @@ def check() -> None:
     default="Full",
     help="LinkedIn scraper mode: Short (basic) or Full (detailed)",
 )
+@click.option(
+    "--location",
+    "-l",
+    multiple=True,
+    default=["United States"],
+    help="Filter by location (can specify multiple, default: 'United States')",
+)
 def talent(
     prompt: str,
     output: str,
     max_results: int,
     linkedin: bool,
     linkedin_mode: str,
+    location: tuple[str, ...],
 ) -> None:
     """Run a talent discovery query (Gauntlet Cohort 4 style).
 
@@ -198,9 +206,13 @@ def talent(
     if max_results <= 0:
         max_results_opt = None
 
+    locations_list = list(location) if location else ["United States"]
+
     if linkedin:
         click.echo("[ShouDao] Using LinkedIn as primary source")
         click.echo(f"[ShouDao] LinkedIn mode: {linkedin_mode}")
+        click.echo(f"[ShouDao] Locations: {', '.join(locations_list)}")
+        click.echo("[ShouDao] Profile language: English")
 
     try:
         result = run_talent_pipeline(
@@ -209,6 +221,7 @@ def talent(
             max_results=max_results_opt,
             use_linkedin=linkedin,
             linkedin_mode=linkedin_mode,
+            locations=locations_list,
         )
 
         click.echo(f"\nFound {len(result.candidates)} candidates")
