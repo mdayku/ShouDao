@@ -3,9 +3,10 @@ ShouDao dedupe + scoring engine.
 Includes buyer-only gate and Caribbean country filter.
 """
 
+from datetime import datetime
 from urllib.parse import urlparse
 
-from .models import Lead
+from .models import AgeBand, Candidate, CandidateTier, Lead, SalaryBand
 
 # =============================================================================
 # CARIBBEAN COUNTRY WHITELIST
@@ -443,3 +444,410 @@ def dedupe_contacts_by_email(lead: Lead) -> Lead:
 def dedupe_all_contacts(leads: list[Lead]) -> list[Lead]:
     """Dedupe contacts within each lead by email."""
     return [dedupe_contacts_by_email(lead) for lead in leads]
+
+
+# =============================================================================
+# CANDIDATE SCORING (Gauntlet Talent Discovery)
+# =============================================================================
+
+# Known "good" universities for CS (high CCAT correlation)
+TOP_CS_UNIVERSITIES = {
+    "stanford",
+    "mit",
+    "cmu",
+    "carnegie mellon",
+    "berkeley",
+    "uc berkeley",
+    "cornell",
+    "harvard",
+    "princeton",
+    "caltech",
+    "georgia tech",
+    "illinois",
+    "uiuc",
+    "michigan",
+    "washington",
+    "columbia",
+    "yale",
+    "ucla",
+    "usc",
+    "nyu",
+    "penn",
+    "upenn",
+    "brown",
+    "duke",
+    "northwestern",
+    "purdue",
+    "texas",
+    "ut austin",
+    "waterloo",
+    "toronto",
+    "oxford",
+    "cambridge",
+    "imperial",
+    "eth",
+    "epfl",
+}
+
+# Companies known for high compensation (>$150k likely)
+HIGH_COMP_COMPANIES = {
+    "google",
+    "meta",
+    "facebook",
+    "amazon",
+    "apple",
+    "microsoft",
+    "netflix",
+    "stripe",
+    "openai",
+    "anthropic",
+    "deepmind",
+    "nvidia",
+    "tesla",
+    "uber",
+    "airbnb",
+    "coinbase",
+    "databricks",
+    "snowflake",
+    "palantir",
+    "salesforce",
+    "linkedin",
+    "twitter",
+    "tiktok",
+    "bytedance",
+    "figma",
+    "notion",
+    "discord",
+    "doordash",
+    "instacart",
+    "robinhood",
+    "plaid",
+    "ramp",
+    "brex",
+}
+
+# Roles that typically pay >$150k
+HIGH_COMP_ROLES = {
+    "staff",
+    "senior staff",
+    "principal",
+    "director",
+    "vp",
+    "head of",
+    "lead",
+    "manager",
+    "senior manager",
+}
+
+
+def estimate_salary_band(candidate: Candidate) -> SalaryBand:
+    """
+    Estimate salary band based on company, role, and experience.
+
+    Logic:
+    - FAANG/top-tier companies at any level → likely >$150k
+    - Senior/staff roles anywhere → likely >$150k
+    - Junior/mid roles at startups/smaller cos → likely <$150k
+    - Unknown → unknown
+    """
+    company = (candidate.current_company or "").lower()
+    role = (candidate.current_role or "").lower()
+    years = candidate.years_experience or 0
+
+    # Check for high-comp company
+    is_high_comp_company = any(c in company for c in HIGH_COMP_COMPANIES)
+
+    # Check for high-comp role
+    is_high_comp_role = any(r in role for r in HIGH_COMP_ROLES)
+
+    # If at a top company, likely high comp
+    if is_high_comp_company:
+        if is_high_comp_role or years >= 5:
+            return "200k_plus"
+        else:
+            return "150k_200k"
+
+    # If senior role anywhere
+    if is_high_comp_role:
+        return "150k_200k"
+
+    # Years of experience heuristic
+    if years >= 7:
+        return "150k_200k"
+    elif years >= 4:
+        return "100k_150k"
+    elif years >= 1:
+        return "under_100k"
+
+    # Can't determine
+    return "unknown"
+
+
+def estimate_age(candidate: Candidate) -> int | None:
+    """
+    Estimate age from graduation year or years of experience.
+
+    Logic:
+    - If graduation_year known: age = current_year - graduation_year + 22
+    - If years_experience known: age = 22 + years_experience
+    - Otherwise: None
+
+    Returns:
+        Estimated age in years, or None if cannot estimate.
+    """
+    current_year = datetime.now().year
+
+    # Prefer graduation year (more accurate)
+    if candidate.graduation_year:
+        # Assume graduated at 22 (typical 4-year degree)
+        estimated_birth_year = candidate.graduation_year - 22
+        return current_year - estimated_birth_year
+
+    # Fall back to years of experience
+    if candidate.years_experience:
+        # Assume started working at 22
+        return 22 + candidate.years_experience
+
+    return None
+
+
+def classify_age_band(age: int | None) -> AgeBand:
+    """
+    Classify age into bands based on Gauntlet demographics.
+
+    Gauntlet mean age ~30, std dev ~6-7
+    - young (<24): May lack experience, but high potential
+    - optimal (24-36): Sweet spot for the program
+    - mature (36-42): Good if signals are strong
+    - senior (>42): Higher bar needed, more risk-averse
+
+    Args:
+        age: Estimated age in years, or None.
+
+    Returns:
+        Age band classification.
+    """
+    if age is None:
+        return "unknown"
+
+    if age < 24:
+        return "young"
+    elif 24 <= age <= 36:
+        return "optimal"
+    elif 36 < age <= 42:
+        return "mature"
+    else:
+        return "senior"
+
+
+def score_candidate(candidate: Candidate) -> tuple[float, dict[str, float]]:
+    """
+    Score a candidate based on Gauntlet qualification signals.
+
+    Returns (score 0-1, contributions dict).
+
+    Scoring factors:
+    - CS degree from good school (+0.20)
+    - Engineering experience 2+ years (+0.20)
+    - Public AI/LLM projects (+0.25)
+    - Build-in-public activity (+0.15)
+    - Multiple public repos (+0.10)
+    - Salary likely <$150k (+0.10)
+    """
+    score = 0.0
+    contributions: dict[str, float] = {}
+
+    # CS degree signal
+    degree = (candidate.degree_signal or "").lower()
+    university = (candidate.university or "").lower()
+
+    has_cs = "cs" in degree or "computer" in degree or "software" in degree
+    is_top_school = any(u in university for u in TOP_CS_UNIVERSITIES)
+
+    if has_cs and is_top_school:
+        score += 0.20
+        contributions["cs_top_school"] = 0.20
+    elif has_cs:
+        score += 0.10
+        contributions["cs_degree"] = 0.10
+    elif is_top_school:
+        score += 0.10
+        contributions["top_school"] = 0.10
+
+    # Engineering experience
+    years = candidate.years_experience or 0
+    if years >= 2:
+        score += 0.20
+        contributions["engineering_experience"] = 0.20
+    elif years >= 1:
+        score += 0.10
+        contributions["some_experience"] = 0.10
+
+    # AI/LLM project signal
+    if candidate.ai_signal_score >= 0.7:
+        score += 0.25
+        contributions["strong_ai_signal"] = 0.25
+    elif candidate.ai_signal_score >= 0.4:
+        score += 0.15
+        contributions["some_ai_signal"] = 0.15
+
+    # Build in public
+    if candidate.build_in_public_score >= 0.6:
+        score += 0.15
+        contributions["builds_in_public"] = 0.15
+    elif candidate.build_in_public_score >= 0.3:
+        score += 0.08
+        contributions["some_public_work"] = 0.08
+
+    # Multiple public repos
+    repo_count = len(candidate.public_repos)
+    if repo_count >= 5:
+        score += 0.10
+        contributions["many_repos"] = 0.10
+    elif repo_count >= 2:
+        score += 0.05
+        contributions["some_repos"] = 0.05
+
+    # Salary band bonus (incentive alignment)
+    salary = candidate.estimated_salary_band
+    if salary == "under_100k":
+        score += 0.10
+        contributions["salary_incentive_aligned"] = 0.10
+    elif salary == "100k_150k":
+        score += 0.05
+        contributions["salary_moderate"] = 0.05
+    # No bonus for 150k+ (less incentive to join)
+
+    # Contact quality bonus
+    if candidate.email:
+        score += 0.05
+        contributions["has_email"] = 0.05
+    if candidate.linkedin_url:
+        score += 0.05
+        contributions["has_linkedin"] = 0.05
+
+    # Age band adjustments (Gauntlet sweet spot: mean ~30, std dev ~6-7)
+    age_band = candidate.age_band
+    if age_band == "optimal":
+        score += 0.10
+        contributions["age_optimal"] = 0.10
+    elif age_band == "young":
+        score -= 0.10
+        contributions["age_young_penalty"] = -0.10
+    elif age_band == "senior":
+        score -= 0.15
+        contributions["age_senior_penalty"] = -0.15
+    # "mature" and "unknown" have no adjustment
+
+    return min(max(score, 0.0), 1.0), contributions
+
+
+def classify_candidate_tier(candidate: Candidate) -> CandidateTier:
+    """
+    Classify a candidate into fit tiers.
+
+    Tier A: CS/eng background + public AI project + likely <$150k
+    Tier B: Good repos, fewer demos, strong learning trajectory
+    Tier C: Early but promising, might pass with mentorship
+    """
+    score = candidate.confidence
+    salary = candidate.estimated_salary_band
+
+    # Tier A: High score AND not already making big money
+    if score >= 0.6 and salary in ("under_100k", "100k_150k", "unknown"):
+        return "A"
+
+    # Tier B: Decent score OR high score but high salary
+    if score >= 0.4:
+        return "B"
+
+    # Tier C: Everyone else (contactable)
+    return "C"
+
+
+def score_all_candidates(candidates: list[Candidate]) -> list[Candidate]:
+    """Score all candidates and update their fields."""
+    for candidate in candidates:
+        # Estimate age and classify band
+        candidate.estimated_age = estimate_age(candidate)
+        candidate.age_band = classify_age_band(candidate.estimated_age)
+
+        # Estimate salary band
+        candidate.estimated_salary_band = estimate_salary_band(candidate)
+
+        # Score
+        score, contributions = score_candidate(candidate)
+        candidate.confidence = score
+        candidate.score_contributions = contributions
+
+        # Classify tier
+        candidate.overall_fit_tier = classify_candidate_tier(candidate)
+
+        # Generate why_flagged explanation
+        candidate.why_flagged = _generate_why_flagged(candidate)
+
+    return candidates
+
+
+def _generate_why_flagged(candidate: Candidate) -> str:
+    """Generate a human-readable explanation for why this candidate was flagged."""
+    reasons = []
+
+    if candidate.score_contributions.get("cs_top_school"):
+        reasons.append(f"CS from {candidate.university or 'top school'}")
+    elif candidate.score_contributions.get("cs_degree"):
+        reasons.append("CS background")
+
+    if candidate.score_contributions.get("engineering_experience"):
+        years = candidate.years_experience or 0
+        reasons.append(f"{years}+ years engineering")
+
+    if candidate.score_contributions.get("strong_ai_signal"):
+        reasons.append("strong AI/LLM projects")
+    elif candidate.score_contributions.get("some_ai_signal"):
+        reasons.append("AI project interest")
+
+    if candidate.score_contributions.get("builds_in_public"):
+        reasons.append("builds in public")
+
+    repo_count = len(candidate.public_repos)
+    if repo_count > 0:
+        reasons.append(f"{repo_count} public repos")
+
+    if candidate.estimated_salary_band in ("under_100k", "100k_150k"):
+        reasons.append("salary incentive aligned")
+
+    # Age band info
+    if candidate.age_band == "optimal" and candidate.estimated_age:
+        reasons.append(f"~{candidate.estimated_age}yo (optimal)")
+    elif candidate.age_band == "young" and candidate.estimated_age:
+        reasons.append(f"~{candidate.estimated_age}yo (young)")
+    elif candidate.age_band == "mature" and candidate.estimated_age:
+        reasons.append(f"~{candidate.estimated_age}yo (mature)")
+
+    return "; ".join(reasons) if reasons else "Basic qualification signals"
+
+
+def dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:
+    """Deduplicate candidates by primary profile URL or email."""
+    seen_profiles: set[str] = set()
+    seen_emails: set[str] = set()
+    unique = []
+
+    for c in candidates:
+        # Check profile
+        profile_key = c.primary_profile.lower().rstrip("/")
+        if profile_key in seen_profiles:
+            continue
+
+        # Check email
+        if c.email:
+            email_key = c.email.lower()
+            if email_key in seen_emails:
+                continue
+            seen_emails.add(email_key)
+
+        seen_profiles.add(profile_key)
+        unique.append(c)
+
+    return unique

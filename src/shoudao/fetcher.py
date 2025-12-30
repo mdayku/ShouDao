@@ -1,9 +1,12 @@
 """
-ShouDao fetcher - polite HTTP fetching with rate limiting.
+ShouDao fetcher - polite HTTP fetching with rate limiting and caching.
 """
 
+import hashlib
+import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
@@ -21,6 +24,7 @@ class FetchResult:
     html: str = ""
     text: str = ""
     error: str = ""
+    from_cache: bool = False
 
 
 @dataclass
@@ -32,14 +36,18 @@ class FetcherConfig:
     delay_between_requests: float = 1.0  # Seconds between requests to same domain
     max_concurrent: int = 5
     user_agent: str = "ShouDao/0.1 (B2B Lead Research Tool)"
+    cache_dir: Path | None = None  # If set, cache fetched pages here
+    use_cache: bool = True  # Whether to use cached results if available
 
 
 class Fetcher:
-    """Polite HTTP fetcher with domain throttling."""
+    """Polite HTTP fetcher with domain throttling and caching."""
 
     def __init__(self, config: FetcherConfig | None = None):
         self.config = config or FetcherConfig()
         self._domain_last_hit: dict[str, float] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     def _get_domain(self, url: str) -> str:
         """Extract domain from URL."""
@@ -69,6 +77,62 @@ class Fetcher:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         return "\n".join(lines)
 
+    def _url_to_cache_key(self, url: str) -> str:
+        """Convert URL to a cache-safe filename."""
+        return hashlib.sha256(url.encode()).hexdigest()[:16]
+
+    def _get_cache_path(self, url: str) -> Path | None:
+        """Get the cache file path for a URL."""
+        if not self.config.cache_dir:
+            return None
+        return self.config.cache_dir / f"{self._url_to_cache_key(url)}.json"
+
+    def _load_from_cache(self, url: str) -> FetchResult | None:
+        """Try to load a cached result."""
+        if not self.config.use_cache:
+            return None
+
+        cache_path = self._get_cache_path(url)
+        if not cache_path or not cache_path.exists():
+            return None
+
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                data = json.load(f)
+            self._cache_hits += 1
+            return FetchResult(
+                url=data["url"],
+                success=data["success"],
+                status_code=data.get("status_code", 0),
+                html=data.get("html", ""),
+                text=data.get("text", ""),
+                error=data.get("error", ""),
+                from_cache=True,
+            )
+        except Exception:
+            return None
+
+    def _save_to_cache(self, result: FetchResult) -> None:
+        """Save a result to cache."""
+        cache_path = self._get_cache_path(result.url)
+        if not cache_path:
+            return
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = {
+                "url": result.url,
+                "success": result.success,
+                "status_code": result.status_code,
+                "html": result.html,
+                "text": result.text,
+                "error": result.error,
+            }
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception:
+            pass  # Fail silently on cache write errors
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -84,7 +148,13 @@ class Fetcher:
             return client.get(url)
 
     def fetch(self, url: str) -> FetchResult:
-        """Fetch a single URL, respecting rate limits."""
+        """Fetch a single URL, respecting rate limits and cache."""
+        # Try cache first
+        cached = self._load_from_cache(url)
+        if cached:
+            return cached
+
+        self._cache_misses += 1
         domain = self._get_domain(url)
         self._wait_for_domain(domain)
 
@@ -92,13 +162,17 @@ class Fetcher:
             resp = self._fetch_with_retry(url)
             html = resp.text
             text = self._extract_text(html)
-            return FetchResult(
+            result = FetchResult(
                 url=url,
                 success=resp.status_code == 200,
                 status_code=resp.status_code,
                 html=html,
                 text=text,
             )
+            # Cache successful results
+            if result.success:
+                self._save_to_cache(result)
+            return result
         except Exception as e:
             return FetchResult(
                 url=url,
@@ -113,6 +187,14 @@ class Fetcher:
             result = self.fetch(url)
             results.append(result)
         return results
+
+    def get_cache_stats(self) -> dict[str, int]:
+        """Get cache hit/miss statistics."""
+        return {
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "hit_rate": self._cache_hits / max(1, self._cache_hits + self._cache_misses),
+        }
 
 
 def filter_urls(urls: list[str]) -> list[str]:

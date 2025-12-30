@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
-| Version | 0.6 |
+| Version | 0.7 |
 | Last Updated | December 30, 2025 |
 
 ---
@@ -35,6 +35,7 @@
 |---|---|---|
 | P0 | CLI MVP | Prompt → leads.csv + report.md |
 | P0 | Reproducible recipes | Save & rerun queries |
+| **P0.5** | **Gauntlet Talent Discovery** | **Candidate signal extraction for Cohort 4** |
 | P1 | Evidence + compliance | Every lead field is auditable |
 | P1 | Dedupe + scoring | Better lead quality, fewer duplicates |
 | P1.5 | Backend + Storage | Store runs, learn from queries |
@@ -43,10 +44,46 @@
 
 ---
 
+## 🎯 Recommended Next Steps
+
+### Talent Discovery is MVP-Ready
+Core talent discovery works without LinkedIn:
+- ✅ `shoudao talent` command
+- ✅ Candidate model + scoring
+- ✅ Talent-specific query expansion
+- ✅ Age estimation + salary bands
+- ✅ Page caching per run
+- ✅ Rate limit handling (429 backoff)
+
+### Next Priorities
+
+| Task | Why | Effort |
+|------|-----|--------|
+| **Story 15.2**: GitHub API integration | Better repo/commit/star signals | 4h |
+| **Task 12.1.3**: Model cost tracking | Know how much each run costs | 2h |
+| **Task 5.3.1**: Contact page discovery | Find GitHub/LinkedIn links on personal sites | 2h |
+
+### LinkedIn Status
+LinkedIn integration is **blocked**:
+- ❌ Proxycurl shut down
+- ⚠️ PhantomBuster is manual-only (browser automation, no API)
+- ⚠️ Official LinkedIn API requires partner approval
+
+**Workaround:** For now, manually export from PhantomBuster if needed, or skip LinkedIn enrichment.
+
+### Can Skip
+
+| Task | Why |
+|------|-----|
+| Task 4.2.2 (PDF extraction) | Talent surfaces are web-native |
+| Story 6.2 (Crawl policy) | Can add later if needed |
+
+---
+
 ## MVP Exit Criteria (v0.1)
 
 - [x] `shoudao run` produces `leads.csv` + `report.md` + `sources.json`
-- [ ] Recipes can be saved and rerun to refresh output
+- [x] Recipes can be saved and rerun to refresh output
 - [x] Every exported contact channel includes ≥1 evidence URL
 - [x] Dedupe merges obvious duplicates by domain/name
 - [x] Approach advice is present for each lead
@@ -69,12 +106,12 @@
 
 ---
 
-## Epic 2 — Recipes + Query Planner (P0) 🔶 PARTIAL
+## Epic 2 — Recipes + Query Planner (P0) ✅ DONE
 
 ### Story 2.1 — Recipe format (YAML)
-- [ ] Task 2.1.1: Define `recipes/<slug>.yml` format (prompt, filters, seeds, policy)
-- [ ] Task 2.1.2: Implement `shoudao recipe create`
-- [ ] Task 2.1.3: Implement `shoudao recipe run`
+- [x] Task 2.1.1: Define `recipes/<slug>.yml` format (prompt, filters, seeds, policy)
+- [x] Task 2.1.2: Implement `shoudao recipe create`
+- [x] Task 2.1.3: Implement `shoudao recipe run`
 
 ### Story 2.2 — Prompt → query expansion
 - [x] Task 2.2.1: Implement query template library by segment + role + region
@@ -283,50 +320,159 @@ Add structured logging for long runs.
 
 ---
 
-## Epic 13 — Data Source Expansion (P1) 🆕
+## Epic 15 — Gauntlet Talent Discovery (P0.5) 🆕
 
-### Story 13.1 — LinkedIn Integration
-- [ ] Task 13.1.1: LinkedIn Sales Navigator API (requires subscription)
-- [ ] Task 13.1.2: LinkedIn public profile scraping via Proxycurl/PhantomBuster
-- [ ] Task 13.1.3: LinkedIn company page extraction
-- [ ] Task 13.1.4: Cross-reference LinkedIn contacts with extracted leads
+Goal: Adapt ShouDao to find high-likelihood applicants for Gauntlet AI Cohort 4.
 
-### Story 13.2 — Expanded Search Sources
-- [ ] Task 13.2.1: Bing Search API (diversify from Google/Serper)
-- [ ] Task 13.2.2: DuckDuckGo API (privacy-respecting, different index)
-- [ ] Task 13.2.3: Industry-specific directories (ThomasNet, Kompass, etc.)
-- [ ] Task 13.2.4: Trade association member lists
-- [ ] Task 13.2.5: Chamber of Commerce directories
-- [ ] Task 13.2.6: Government contractor registries
+**Use case:** Signal discovery for talent, not spam outreach. Gauntlet staff handles all contact.
 
-### Story 13.3 — Media & News Sources
-- [ ] Task 13.3.1: Google News API for company mentions
-- [ ] Task 13.3.2: Press release aggregators (PR Newswire, BusinessWire)
-- [ ] Task 13.3.3: Trade publication scrapers
-- [ ] Task 13.3.4: Industry award/recognition lists
-- [ ] Task 13.3.5: Conference speaker/exhibitor lists
+### Qualification Signals (encode these)
 
-### Story 13.4 — Business Data APIs
-- [ ] Task 13.4.1: Clearbit API for company enrichment
-- [ ] Task 13.4.2: Hunter.io for email discovery
-- [ ] Task 13.4.3: Apollo.io API integration
-- [ ] Task 13.4.4: Crunchbase for company data
-- [ ] Task 13.4.5: OpenCorporates for legal entity data
+A candidate is interesting if they show ≥3 of these:
 
-### Story 13.5 — Social & Alternative Sources
-- [ ] Task 13.5.1: Twitter/X company account extraction
-- [ ] Task 13.5.2: Facebook business page scraping
-- [ ] Task 13.5.3: Instagram business profiles
-- [ ] Task 13.5.4: YouTube channel/video descriptions
-- [ ] Task 13.5.5: Podcast guest databases
-- [ ] Task 13.5.6: Glassdoor/Indeed for company info
+| Signal | Weight | Source |
+|--------|--------|--------|
+| CS degree from good school | 0.20 | LinkedIn, personal site |
+| Engineering experience (2+ years) | 0.20 | LinkedIn, GitHub, bio |
+| Public AI/LLM project | 0.25 | GitHub, HuggingFace, Streamlit |
+| Build-in-public posts | 0.15 | Blog, Substack, Twitter |
+| Agent/tooling curiosity | 0.10 | Cursor, LangChain, OpenAI mentions |
+| Salary likely <$150k | 0.10 | LinkedIn title/company, geography |
 
-### Story 13.6 — Geographic & Import/Export Data
-- [ ] Task 13.6.1: Import/export databases (ImportGenius, Panjiva)
-- [ ] Task 13.6.2: Customs/shipping records APIs
-- [ ] Task 13.6.3: Port authority manifests
-- [ ] Task 13.6.4: Business license registries by country
-- [ ] Task 13.6.5: Real estate development permit databases
+### Story 15.1 — Candidate Model ✅ DONE
+
+- [x] Task 15.1.1: Define `Candidate` Pydantic model
+  ```python
+  class Candidate(BaseModel):
+      name: str
+      primary_profile: str  # GitHub, personal site
+      linkedin_url: str | None
+      degree_signal: str | None  # "CS, MIT" or "Self-taught"
+      engineering_experience: str | None  # "2 years SWE at startup"
+      current_role: str | None
+      current_company: str | None
+      estimated_salary_band: str | None  # "under_100k", "100k_150k", "150k_plus"
+      public_work: list[str]  # repo links, demos, blogs
+      ai_signal_score: float  # 0-1
+      build_in_public_score: float  # 0-1
+      overall_fit_tier: Literal["A", "B", "C"]
+      why_flagged: str  # human-readable justification
+      evidence: list[Evidence]
+  ```
+- [x] Task 15.1.2: Define `CandidateSignal` for individual signals (integrated into Candidate)
+- [x] Task 15.1.3: Add candidate exporter (CSV/Excel/JSON)
+
+### Story 15.2 — GitHub Integration
+
+- [ ] Task 15.2.1: GitHub API client (with token auth)
+- [ ] Task 15.2.2: Extract: repos, stars, languages, commit frequency
+- [ ] Task 15.2.3: Identify AI/LLM repos (keywords: agent, llm, openai, langchain)
+- [ ] Task 15.2.4: Extract README quality signals
+- [ ] Task 15.2.5: Rate limit handling (5000 req/hr with token)
+
+### Story 15.3 — LinkedIn Integration ❌ BLOCKED
+
+**Status:** LinkedIn integration is blocked due to lack of viable APIs.
+
+- ❌ Proxycurl — **Shut down** (no longer available)
+- ⚠️ PhantomBuster — Manual-only (browser automation, exports CSV, not callable API)
+- ⚠️ Official LinkedIn API — Requires partner approval, not available to indie devs
+- ⚠️ RapidAPI options — Mostly scrapers with ToS concerns
+
+**Workaround:** Manual enrichment via PhantomBuster exports if needed.
+
+- [x] Task 15.3.1: Evaluate LinkedIn data providers — **No viable options found**
+- [ ] Task 15.3.2-5: **Blocked** pending API availability
+
+### Story 15.4 — Talent Query Expansion ✅ DONE
+
+- [x] Task 15.4.1: Define talent-specific query templates
+  ```python
+  TALENT_QUERIES = [
+      'site:github.com "agent" "openai"',
+      'site:github.com "streamlit" "llm"',
+      '"built with gpt" project',
+      '"learning in public" ai',
+      '"openai api" project demo',
+      '"huggingface spaces" personal',
+      '"cursor ai" workflow',
+      '"LLM agent" side project',
+      'site:substack.com "building" "ai"',
+  ]
+  ```
+- [x] Task 15.4.2: Add "gauntlet ai cohort" adjacent query
+- [x] Task 15.4.3: Add university-specific queries (top CS programs)
+
+### Story 15.5 — Candidate Scoring ✅ DONE
+
+- [x] Task 15.5.1: Implement `score_candidate()` function
+- [x] Task 15.5.2: Implement `classify_candidate_tier()` (A/B/C)
+- [x] Task 15.5.3: Implement salary band estimation logic
+- [x] Task 15.5.4: Add `score_contributions` explanation
+
+Tier definitions:
+- **Tier A**: CS/eng background + public AI project + likely <$150k
+- **Tier B**: Good repos, fewer demos, strong learning trajectory
+- **Tier C**: Early but promising, might pass with mentorship
+
+### Story 15.6 — Talent Extraction Prompt ✅ DONE
+
+- [x] Task 15.6.1: Design LLM extraction prompt for candidate signals
+- [x] Task 15.6.2: Extract: name, education, experience, project links
+- [x] Task 15.6.3: Generate `why_flagged` justification
+- [x] Task 15.6.4: Skip advice generation (Gauntlet handles outreach)
+
+### Story 15.7 — CLI Integration ✅ DONE
+
+- [x] Task 15.7.1: Add `shoudao talent` command (not flag)
+- [x] Task 15.7.2: Load talent-specific query templates
+- [x] Task 15.7.3: Use candidate schema instead of lead schema
+- [x] Task 15.7.4: Output `candidates.csv` / `candidates.xlsx` / `candidates.json`
+
+### Story 15.8 — Discovery Surfaces
+
+Priority order:
+1. GitHub (repos, READMEs, profiles)
+2. LinkedIn (education, experience, salary signals)
+3. Personal websites/blogs
+4. Substack/Medium (technical writing)
+5. Hugging Face Spaces
+6. Streamlit demos
+7. Twitter/X (optional, low priority)
+
+### Ethical Guardrails (Hard Rules)
+
+- ❌ No email guessing
+- ❌ No private contact scraping
+- ✅ Only publicly listed contact info
+- ✅ Preference for GitHub/Twitter/website contact
+- ✅ Clear opt-out language in any outreach (Gauntlet's responsibility)
+- ✅ "Saw your public work" justification required
+
+---
+
+## Epic 13 — Data Source Expansion (P2) 🔮 FUTURE
+
+> **Note:** This epic is a wishlist of potential integrations. Most are speculative and depend on API availability, cost, and ToS compliance. Prioritize based on actual need.
+
+### Story 13.1 — LinkedIn Integration ❌ BLOCKED
+See Story 15.3 — No viable API options available.
+
+### Story 13.2 — GitHub API (Next Priority)
+- [ ] Task 13.2.1: GitHub API client with token auth
+- [ ] Task 13.2.2: Extract repos, stars, languages, commit frequency
+- [ ] Task 13.2.3: Rate limit handling (5000 req/hr with token)
+
+### Story 13.3 — Alternative Search Sources (Low Priority)
+- [ ] Task 13.3.1: Bing Search API
+- [ ] Task 13.3.2: DuckDuckGo API
+
+### Story 13.4 — Business Data APIs (Evaluate as needed)
+Potential integrations if budget allows:
+- Hunter.io (email discovery)
+- Apollo.io (sales intelligence)
+- Clearbit (company enrichment)
+- Crunchbase (company data)
 
 ---
 
@@ -335,12 +481,13 @@ Add structured logging for long runs.
 | Issue | Status | Notes |
 |-------|--------|-------|
 | datetime.utcnow() deprecated | ✅ Fixed | Now using datetime.now(timezone.utc) |
+| Retry/backoff for API 429s | ✅ Fixed | Added to search, extractor, fetcher |
+| Rate limit handling for gpt-4o | ✅ Fixed | Backoff with exponential retry |
+| Page caching per run | ✅ Fixed | Cache in run folder, reuse on retry |
 | EmailStr validation | ⏳ TODO | Use Pydantic EmailStr for email fields |
 | Phone normalization | ⏳ TODO | Standardize phone formats |
 | Industry deduplication | ⏳ TODO | Lowercase + synonym map |
-| Retry/backoff for search API 429s | ⏳ TODO | Add to SerperProvider |
 | Per-run request budget | ⏳ TODO | max_search_queries, max_pages configs |
-| Rate limit handling for gpt-4o | ⏳ TODO | Add backoff for 429 errors |
 
 ---
 
@@ -363,6 +510,66 @@ Add structured logging for long runs.
 ---
 
 ## Session Log
+
+### 2025-12-30 Session 3
+**Focus:** Recipe system implementation
+
+**Built:**
+- **Recipe YAML format** — `recipes/<slug>.yml` with prompt, filters, context, policy
+- **Recipe CLI commands** — `shoudao recipe create/list/show/run/delete`
+- **Recipe model** — `QueryRecipe` Pydantic model with validation
+- **Recipe persistence** — Save/load recipes from YAML files
+- **Recipe runner** — `shoudao recipe run <slug>` executes saved recipes
+- Updated backlog to mark Epic 2 as complete
+- Updated PRD changelog with v0.5.0 entry
+
+**Recipe commands:**
+- `shoudao recipe create` — Create new recipe from CLI args
+- `shoudao recipe list` — List all saved recipes
+- `shoudao recipe show <slug>` — Show recipe details
+- `shoudao recipe run <slug>` — Execute saved recipe
+- `shoudao recipe delete <slug>` — Delete recipe
+
+**Tests:** Recipe system tested manually, all commands working
+
+---
+
+### 2025-12-30 Session 2
+**Focus:** Unlimited max-results + Gauntlet Talent Discovery planning
+
+**Built:**
+- **Unlimited max-results support** — `--max-results 0` means no cap
+- Updated `RunConfig.max_results` to allow `None` (unlimited)
+- Updated pipeline slicing to handle unlimited
+- Added `test_run_max_results_zero_means_unlimited` test
+- Added `test_config_max_results_allows_none` test
+- Updated `build_analysis_doc.py` to include `ARCHITECTURE.md`
+- Regenerated `SHOUDAO_ANALYSIS.md` (now 26 files)
+
+**Best Run: 252 leads (unlimited)**
+| Metric | Value |
+|--------|-------|
+| Total Leads | 252 |
+| Sources Fetched | 92 |
+| Domains Hit | 89 |
+| Queries Generated | 113 |
+| Time | ~35 minutes |
+| Tier A | 190 (75%) |
+| Tier B | 58 (23%) |
+| Tier C | 4 (2%) |
+| Top Country | Trinidad and Tobago (64) |
+
+**Planned:**
+- Epic 15: Gauntlet Talent Discovery
+  - GitHub API integration
+  - LinkedIn integration (salary signals)
+  - Candidate model and scoring
+  - Talent-specific query expansion
+  - `--use-case talent` CLI flag
+
+**Tests:** 111 passing
+
+---
 
 ### 2025-12-30 Session 1
 **Commits:** f2423d6 → (current)

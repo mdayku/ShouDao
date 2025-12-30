@@ -208,5 +208,7 @@ class TestRunConfig:
         with pytest.raises(ValidationError):
             RunConfig(prompt="test", max_results=0)
 
-        with pytest.raises(ValidationError):
-            RunConfig(prompt="test", max_results=1000)
+    def test_config_max_results_allows_none(self) -> None:
+        """Test that max_results can be None (unlimited)."""
+        config = RunConfig(prompt="test", max_results=None)
+        assert config.max_results is None

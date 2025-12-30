@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 # =============================================================================
 # TYPE LITERALS (extensible via Literal union)
@@ -249,6 +249,140 @@ class Lead(BaseModel):
 
 
 # =============================================================================
+# TALENT DISCOVERY MODELS (Gauntlet Cohort 4)
+# =============================================================================
+
+SalaryBand = Literal["under_100k", "100k_150k", "150k_200k", "200k_plus", "unknown"]
+CandidateTier = Literal["A", "B", "C"]
+AgeBand = Literal["young", "optimal", "mature", "senior", "unknown"]
+
+
+class Candidate(BaseModel):
+    """
+    A talent candidate for Gauntlet-style programs.
+    Qualified if we have email OR social media (GitHub, LinkedIn, Twitter).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Identity
+    name: str | None = Field(default=None, description="Full name if found")
+    primary_profile: str = Field(..., min_length=1, description="Main profile URL (GitHub, site)")
+
+    # Contact channels (need at least one of: email OR social)
+    email: str | None = Field(default=None, description="Public email if found")
+    github_url: str | None = Field(default=None, description="GitHub profile URL")
+    linkedin_url: str | None = Field(default=None, description="LinkedIn profile URL")
+    twitter_url: str | None = Field(default=None, description="Twitter/X profile URL")
+    website_url: str | None = Field(default=None, description="Personal website/blog")
+
+    # Education signals
+    degree_signal: str | None = Field(
+        default=None, description="Education info, e.g. 'CS, MIT' or 'Self-taught'"
+    )
+    university: str | None = Field(default=None, description="University name if found")
+
+    # Experience signals
+    engineering_experience: str | None = Field(
+        default=None, description="Work experience summary, e.g. '2 years SWE at startup'"
+    )
+    current_role: str | None = Field(default=None, description="Current job title")
+    current_company: str | None = Field(default=None, description="Current employer")
+    years_experience: int | None = Field(default=None, ge=0, description="Years of experience")
+
+    # Age estimation (Gauntlet sweet spot: mean ~30, std dev ~6-7)
+    graduation_year: int | None = Field(default=None, description="Undergrad graduation year if found")
+    estimated_age: int | None = Field(default=None, ge=18, le=70, description="Estimated age in years")
+    age_band: AgeBand = Field(
+        default="unknown",
+        description="young (<24), optimal (24-36), mature (36-42), senior (>42)",
+    )
+
+    # Salary estimation
+    estimated_salary_band: SalaryBand = Field(
+        default="unknown", description="Estimated salary band based on role/company/geo"
+    )
+
+    # Public work (the key signal)
+    public_repos: list[str] = Field(default_factory=list, description="GitHub repo URLs")
+    public_demos: list[str] = Field(
+        default_factory=list, description="Streamlit, HF Spaces, deployed apps"
+    )
+    blog_posts: list[str] = Field(default_factory=list, description="Technical blog post URLs")
+
+    # Scoring
+    ai_signal_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="AI/LLM project engagement (0-1)"
+    )
+    build_in_public_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Public building activity (0-1)"
+    )
+    overall_fit_tier: CandidateTier = Field(default="C", description="A/B/C tier")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Overall confidence")
+
+    # Explanation
+    why_flagged: str = Field(
+        default="", description="Human-readable justification for why this candidate was flagged"
+    )
+    score_contributions: dict[str, float] = Field(
+        default_factory=dict, description="Breakdown of scoring factors"
+    )
+
+    # Evidence
+    evidence: list[Evidence] = Field(default_factory=list)
+    extracted_from_url: str | None = Field(default=None)
+
+    def is_contactable(self) -> bool:
+        """Check if we have enough to reach out (email OR social)."""
+        return bool(
+            self.email or self.github_url or self.linkedin_url or self.twitter_url
+        )
+
+    def get_contact_channels(self) -> list[str]:
+        """Get all available contact channels."""
+        channels = []
+        if self.email:
+            channels.append(f"email:{self.email}")
+        if self.github_url:
+            channels.append(f"github:{self.github_url}")
+        if self.linkedin_url:
+            channels.append(f"linkedin:{self.linkedin_url}")
+        if self.twitter_url:
+            channels.append(f"twitter:{self.twitter_url}")
+        return channels
+
+    def get_public_work_count(self) -> int:
+        """Count total public work artifacts."""
+        return len(self.public_repos) + len(self.public_demos) + len(self.blog_posts)
+
+
+class TalentRunResult(BaseModel):
+    """Result of a talent discovery run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[Candidate] = Field(default_factory=list)
+    run_id: str = Field(default="")
+    prompt: str = Field(default="")
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    finished_at: datetime | None = Field(default=None)
+
+    # Stats
+    sources_fetched: int = Field(default=0)
+    total_candidates_extracted: int = Field(default=0)
+    total_candidates_after_dedupe: int = Field(default=0)
+    contactable_candidates: int = Field(default=0)
+
+    # Tier breakdown
+    tier_a_count: int = Field(default=0)
+    tier_b_count: int = Field(default=0)
+    tier_c_count: int = Field(default=0)
+
+    # Errors
+    errors: list[str] = Field(default_factory=list)
+
+
+# =============================================================================
 # QUERY RECIPE
 # =============================================================================
 
@@ -299,7 +433,30 @@ class RunConfig(BaseModel):
     blocked_domains: list[str] = Field(default_factory=list)
 
     # Limits
-    max_results: int = Field(default=50, ge=1, le=500)
+    max_results: int | None = Field(
+        default=50,
+        description="Maximum number of leads to keep after scoring; None means unlimited.",
+    )
+
+    @field_validator("max_results")
+    @classmethod
+    def _validate_max_results(cls, v: int | None) -> int | None:
+        """Validate max_results.
+
+        Args:
+            v: The max results value.
+
+        Returns:
+            The validated value.
+
+        Raises:
+            ValueError: If v is non-null and less than 1.
+        """
+        if v is None:
+            return None
+        if v < 1:
+            raise ValueError("max_results must be >= 1, or None for unlimited")
+        return v
 
     # Context for advice
     product_context: str = Field(default="", description="What's being sold")

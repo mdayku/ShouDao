@@ -15,6 +15,7 @@ MD_FILES = [
     "README.md",
     "ShouDao_PRD.md",
     "ShouDao_BACKLOG.md",
+    "ARCHITECTURE.md",
 ]
 
 PY_DIRS = [

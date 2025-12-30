@@ -8,13 +8,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .advisor import Advisor
-from .dedupe import apply_buyer_gate, dedupe_all_contacts, dedupe_leads, score_all_leads
-from .exporter import export_csv, export_excel, export_json, generate_report
-from .extractor import Extractor
+from .dedupe import (
+    apply_buyer_gate,
+    dedupe_all_contacts,
+    dedupe_candidates,
+    dedupe_leads,
+    score_all_candidates,
+    score_all_leads,
+)
+from .exporter import (
+    export_candidates_csv,
+    export_candidates_excel,
+    export_candidates_json,
+    export_csv,
+    export_excel,
+    export_json,
+    generate_report,
+    generate_talent_report,
+)
+from .extractor import Extractor, TalentExtractor
 from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
 from .logger import ProgressLogger
-from .models import Lead, RunConfig, RunResult
-from .search import expand_prompt_to_queries, get_search_provider
+from .models import Candidate, Lead, RunConfig, RunResult, TalentRunResult
+from .search import expand_prompt_to_queries, expand_talent_queries, get_search_provider
 from .sources import SourcesLog
 
 
@@ -168,8 +184,10 @@ class Pipeline:
         )
         print(f"  Advice generated for {len(leads)} leads")
 
-        # Cap at max_results, sorted by confidence
-        leads = sorted(leads, key=lambda lead: -lead.confidence)[: self.config.max_results]
+        # Cap at max_results (if configured), sorted by confidence
+        leads = sorted(leads, key=lambda lead: -lead.confidence)
+        if self.config.max_results is not None:
+            leads = leads[: self.config.max_results]
 
         result.leads = leads
         result.finished_at = datetime.now(UTC)
@@ -203,7 +221,7 @@ def run_pipeline(
     countries: list[str] | None = None,
     industries: list[str] | None = None,
     seed_sources: list[str] | None = None,
-    max_results: int = 50,
+    max_results: int | None = 50,
     output_dir: Path | None = None,
     product_context: str = "",
     seller_context: str = "",
@@ -220,3 +238,144 @@ def run_pipeline(
     )
     pipeline = Pipeline(config)
     return pipeline.run(output_dir=output_dir)
+
+
+# =============================================================================
+# TALENT DISCOVERY PIPELINE (Gauntlet Cohort 4)
+# =============================================================================
+
+
+class TalentPipeline:
+    """Talent discovery pipeline for finding Gauntlet candidates."""
+
+    def __init__(self, prompt: str, verbose: bool = False):
+        self.prompt = prompt
+        self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_talent_" + uuid.uuid4().hex[:6]
+        self.logger = ProgressLogger(self.run_id, verbose=verbose)
+
+    def run(
+        self,
+        output_dir: Path | None = None,
+        max_results: int | None = None,
+        filters: dict | None = None,
+    ) -> TalentRunResult:
+        """Execute the talent discovery pipeline."""
+        result = TalentRunResult(
+            run_id=self.run_id,
+            prompt=self.prompt,
+            started_at=datetime.now(UTC),
+        )
+
+        self.logger.phase("Starting talent discovery", f"ID={self.run_id}")
+        print(f"  Prompt: {self.prompt[:100]}..." if len(self.prompt) > 100 else f"  Prompt: {self.prompt}")
+
+        # Step 1: Generate talent queries
+        self.logger.phase("Query expansion", "Step 1/5")
+        queries = expand_talent_queries(self.prompt, filters)
+        print(f"  Generated {len(queries)} talent discovery queries")
+
+        # Step 2: Search for URLs
+        self.logger.phase("Searching for sources", "Step 2/5")
+        # Use Serper for now (could add GitHub API later)
+        config = RunConfig(prompt=self.prompt, search_provider="serper")
+        search_provider = get_search_provider(config)
+
+        all_urls = []
+        for query in queries:
+            try:
+                urls = search_provider.search(query, num_results=10)
+                all_urls.extend(urls)
+                print(f"  Query returned {len(urls)} URLs")
+            except Exception as e:
+                result.errors.append(f"Search error: {e}")
+                print(f"  Search error: {e}")
+
+        # Filter and dedupe URLs
+        all_urls = filter_urls(all_urls)
+        all_urls = dedupe_by_domain(list(set(all_urls)), max_per_domain=3)
+        print(f"  Total unique URLs after filtering: {len(all_urls)}")
+
+        # Step 3: Fetch pages
+        self.logger.phase("Fetching pages", f"Step 3/5 - {len(all_urls)} URLs")
+        fetcher = Fetcher(FetcherConfig(delay_between_requests=1.0))
+        fetch_results = fetcher.fetch_many(all_urls[:150])  # Higher cap for talent
+
+        successful = [fr for fr in fetch_results if fr.success]
+        result.sources_fetched = len(successful)
+        print(f"  Fetched {len(successful)}/{len(all_urls)} pages")
+
+        # Step 4: Extract candidates
+        self.logger.phase("Extracting candidates", f"Step 4/5 - {len(successful)} pages")
+        extractor = TalentExtractor()
+        all_candidates: list[Candidate] = []
+
+        for fetch_result in successful:
+            try:
+                extraction = extractor.extract(fetch_result)
+                candidates = extractor.extraction_to_candidates(extraction, fetch_result.url)
+                all_candidates.extend(candidates)
+
+                if candidates:
+                    print(f"  Found {len(candidates)} candidate(s) from {fetch_result.url[:60]}...")
+            except Exception as e:
+                result.errors.append(f"Extraction error: {e}")
+                print(f"  Extraction error: {e}")
+
+        result.total_candidates_extracted = len(all_candidates)
+        print(f"  Total raw candidates: {len(all_candidates)}")
+
+        # Step 5: Dedupe, score, and classify
+        self.logger.phase("Scoring and classification", f"Step 5/5 - {len(all_candidates)} candidates")
+        candidates = dedupe_candidates(all_candidates)
+        candidates = score_all_candidates(candidates)
+
+        # Filter to only contactable candidates
+        candidates = [c for c in candidates if c.is_contactable()]
+        result.contactable_candidates = len(candidates)
+
+        # Sort by confidence and apply max_results
+        candidates = sorted(candidates, key=lambda c: -c.confidence)
+        if max_results is not None:
+            candidates = candidates[:max_results]
+
+        # Count tiers
+        result.tier_a_count = sum(1 for c in candidates if c.overall_fit_tier == "A")
+        result.tier_b_count = sum(1 for c in candidates if c.overall_fit_tier == "B")
+        result.tier_c_count = sum(1 for c in candidates if c.overall_fit_tier == "C")
+
+        print(f"  Tier distribution: A={result.tier_a_count}, B={result.tier_b_count}, C={result.tier_c_count}")
+
+        result.candidates = candidates
+        result.total_candidates_after_dedupe = len(candidates)
+        result.finished_at = datetime.now(UTC)
+
+        # Export outputs
+        if output_dir:
+            run_dir = output_dir / self.run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+
+            csv_path = run_dir / "candidates.csv"
+            json_path = run_dir / "candidates.json"
+            report_path = run_dir / "report.md"
+
+            export_candidates_csv(candidates, csv_path)
+            export_candidates_excel(candidates, run_dir / "candidates.xlsx")
+            export_candidates_json(candidates, json_path)
+            generate_talent_report(result, report_path)
+
+            self.logger.finish(len(candidates), str(run_dir))
+            print(f"  CSV: {csv_path}")
+            print(f"  Report: {report_path}")
+
+        return result
+
+
+def run_talent_pipeline(
+    prompt: str,
+    output_dir: Path | None = None,
+    max_results: int | None = None,
+    filters: dict | None = None,
+) -> TalentRunResult:
+    """Convenience function to run a talent discovery pipeline."""
+    pipeline = TalentPipeline(prompt)
+    return pipeline.run(output_dir=output_dir, max_results=max_results, filters=filters)

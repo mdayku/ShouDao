@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 from urllib.parse import urlparse
 
-from .models import Lead, RunResult
+from .models import Candidate, Lead, RunResult, TalentRunResult
 
 
 def _extract_root_domain(url: str) -> str:
@@ -300,6 +300,225 @@ def generate_report(result: RunResult, output: Path) -> None:
 """
         for ind, count in sorted(by_industry.items(), key=lambda x: -x[1]):
             report += f"| {ind} | {count} |\n"
+
+    if result.errors:
+        report += "\n## Errors\n"
+        for err in result.errors:
+            report += f"- {err}\n"
+
+    with open(output, "w", encoding="utf-8") as f:
+        f.write(report)
+
+
+# =============================================================================
+# CANDIDATE EXPORT (Gauntlet Talent Discovery)
+# =============================================================================
+
+CANDIDATE_CSV_COLUMNS = [
+    # Identity
+    "name",
+    "primary_profile",
+    # Contact channels
+    "email",
+    "github_url",
+    "linkedin_url",
+    "twitter_url",
+    "website_url",
+    # Education
+    "degree_signal",
+    "university",
+    "graduation_year",
+    # Experience
+    "current_role",
+    "current_company",
+    "years_experience",
+    # Age & Salary estimation
+    "estimated_age",
+    "age_band",
+    "estimated_salary_band",
+    # Public work
+    "public_repos",
+    "public_demos",
+    "blog_posts",
+    # Scoring
+    "ai_signal_score",
+    "build_in_public_score",
+    "overall_fit_tier",
+    "confidence",
+    "why_flagged",
+    # Evidence
+    "evidence_urls",
+    "extracted_from_url",
+]
+
+
+def candidate_to_row(candidate: Candidate) -> dict:
+    """Convert a Candidate to a flat CSV row dict."""
+    evidence_urls = [str(e.url) for e in candidate.evidence]
+
+    return {
+        # Identity
+        "name": candidate.name or "",
+        "primary_profile": candidate.primary_profile,
+        # Contact channels
+        "email": candidate.email or "",
+        "github_url": candidate.github_url or "",
+        "linkedin_url": candidate.linkedin_url or "",
+        "twitter_url": candidate.twitter_url or "",
+        "website_url": candidate.website_url or "",
+        # Education
+        "degree_signal": candidate.degree_signal or "",
+        "university": candidate.university or "",
+        "graduation_year": str(candidate.graduation_year) if candidate.graduation_year else "",
+        # Experience
+        "current_role": candidate.current_role or "",
+        "current_company": candidate.current_company or "",
+        "years_experience": str(candidate.years_experience) if candidate.years_experience else "",
+        # Age & Salary estimation
+        "estimated_age": str(candidate.estimated_age) if candidate.estimated_age else "",
+        "age_band": candidate.age_band,
+        "estimated_salary_band": candidate.estimated_salary_band,
+        # Public work
+        "public_repos": ";".join(candidate.public_repos),
+        "public_demos": ";".join(candidate.public_demos),
+        "blog_posts": ";".join(candidate.blog_posts),
+        # Scoring
+        "ai_signal_score": f"{candidate.ai_signal_score:.2f}",
+        "build_in_public_score": f"{candidate.build_in_public_score:.2f}",
+        "overall_fit_tier": candidate.overall_fit_tier,
+        "confidence": f"{candidate.confidence:.2f}",
+        "why_flagged": candidate.why_flagged,
+        # Evidence
+        "evidence_urls": ";".join(evidence_urls),
+        "extracted_from_url": candidate.extracted_from_url or "",
+    }
+
+
+def export_candidates_csv(candidates: list[Candidate], output: Path | TextIO) -> int:
+    """Export candidates to CSV file. Returns number of rows written."""
+    rows = [candidate_to_row(c) for c in candidates]
+
+    if isinstance(output, Path):
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(output, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CANDIDATE_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+    else:
+        writer = csv.DictWriter(output, fieldnames=CANDIDATE_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return len(rows)
+
+
+def export_candidates_excel(candidates: list[Candidate], output: Path) -> int:
+    """Export candidates to Excel file with auto-fitted column widths."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    rows = [candidate_to_row(c) for c in candidates]
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Candidates"
+
+    # Write header
+    for col_idx, col_name in enumerate(CANDIDATE_CSV_COLUMNS, 1):
+        ws.cell(row=1, column=col_idx, value=col_name)
+
+    # Write data rows
+    for row_idx, row_data in enumerate(rows, 2):
+        for col_idx, col_name in enumerate(CANDIDATE_CSV_COLUMNS, 1):
+            ws.cell(row=row_idx, column=col_idx, value=row_data.get(col_name, ""))
+
+    # Auto-fit column widths
+    for col_idx, col_name in enumerate(CANDIDATE_CSV_COLUMNS, 1):
+        column_letter = get_column_letter(col_idx)
+        max_length = len(col_name)
+        for row_data in rows:
+            cell_value = str(row_data.get(col_name, ""))
+            cell_length = min(len(cell_value), 50)
+            max_length = max(max_length, cell_length)
+        adjusted_width = max_length + 2
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    # Style header row (bold)
+    for col_idx in range(1, len(CANDIDATE_CSV_COLUMNS) + 1):
+        ws.cell(row=1, column=col_idx).font = Font(bold=True)
+
+    wb.save(output)
+    return len(rows)
+
+
+def export_candidates_json(candidates: list[Candidate], output: Path) -> int:
+    """Export candidates to JSON file (canonical format)."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    data = [c.model_dump(mode="json") for c in candidates]
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, default=str)
+    return len(data)
+
+
+def generate_talent_report(result: TalentRunResult, output: Path) -> None:
+    """Generate a markdown report for talent discovery run."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    # Count by tier and salary band
+    by_tier: dict[str, int] = {"A": 0, "B": 0, "C": 0}
+    by_salary: dict[str, int] = {}
+    by_university: dict[str, int] = {}
+
+    for c in result.candidates:
+        by_tier[c.overall_fit_tier] = by_tier.get(c.overall_fit_tier, 0) + 1
+        by_salary[c.estimated_salary_band] = by_salary.get(c.estimated_salary_band, 0) + 1
+        if c.university:
+            by_university[c.university] = by_university.get(c.university, 0) + 1
+
+    report = f"""# ShouDao Talent Discovery Report
+
+## Run Info
+| Field | Value |
+|---|---|
+| Run ID | {result.run_id} |
+| Started | {result.started_at.isoformat()} |
+| Finished | {result.finished_at.isoformat() if result.finished_at else "In progress"} |
+| Sources Fetched | {result.sources_fetched} |
+| Total Candidates | {len(result.candidates)} |
+| Contactable | {result.contactable_candidates} |
+
+## Prompt
+```
+{result.prompt}
+```
+
+## Candidates by Tier
+| Tier | Description | Count |
+|---|---|---|
+| A | Strong match (CS + AI + low salary) | {by_tier.get("A", 0)} |
+| B | Good potential | {by_tier.get("B", 0)} |
+| C | Early / needs verification | {by_tier.get("C", 0)} |
+
+## Candidates by Estimated Salary Band
+| Band | Count |
+|---|---|
+"""
+    for band, count in sorted(by_salary.items(), key=lambda x: -x[1]):
+        report += f"| {band} | {count} |\n"
+
+    if by_university:
+        report += """
+## Candidates by University (Top 10)
+| University | Count |
+|---|---|
+"""
+        for uni, count in sorted(by_university.items(), key=lambda x: -x[1])[:10]:
+            report += f"| {uni} | {count} |\n"
 
     if result.errors:
         report += "\n## Errors\n"

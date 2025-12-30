@@ -3,11 +3,24 @@ ShouDao search provider - discover URLs from prompts.
 """
 
 import os
+import time
 from abc import ABC, abstractmethod
 
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .models import RunConfig
+
+
+class RateLimitError(Exception):
+    """Raised when API returns 429 Too Many Requests."""
+
+    pass
 
 
 class SearchProvider(ABC):
@@ -20,16 +33,33 @@ class SearchProvider(ABC):
 
 
 class SerperProvider(SearchProvider):
-    """Serper.dev search API provider."""
+    """Serper.dev search API provider with retry logic."""
 
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("SERPER_API_KEY")
         if not self.api_key:
             raise ValueError("SERPER_API_KEY not set")
         self.base_url = "https://google.serper.dev/search"
+        self._last_request_time: float = 0
+        self._min_request_interval: float = 0.5  # 500ms between requests
 
-    def search(self, query: str, num_results: int = 10) -> list[str]:
-        """Execute Google search via Serper and return URLs."""
+    def _wait_for_rate_limit(self) -> None:
+        """Ensure minimum interval between requests."""
+        elapsed = time.time() - self._last_request_time
+        if elapsed < self._min_request_interval:
+            time.sleep(self._min_request_interval - elapsed)
+        self._last_request_time = time.time()
+
+    @retry(
+        retry=retry_if_exception_type(RateLimitError),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, min=4, max=60),
+        reraise=True,
+    )
+    def _search_with_retry(self, query: str, num_results: int) -> list[str]:
+        """Execute search with retry on rate limit."""
+        self._wait_for_rate_limit()
+
         headers = {
             "X-API-KEY": self.api_key,
             "Content-Type": "application/json",
@@ -41,6 +71,14 @@ class SerperProvider(SearchProvider):
 
         with httpx.Client(timeout=30) as client:
             resp = client.post(self.base_url, json=payload, headers=headers)
+
+            # Handle rate limiting
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", "10"))
+                print(f"  [Rate limit] Serper 429, waiting {retry_after}s...")
+                time.sleep(retry_after)
+                raise RateLimitError(f"Rate limited, retry after {retry_after}s")
+
             resp.raise_for_status()
             data = resp.json()
 
@@ -50,6 +88,10 @@ class SerperProvider(SearchProvider):
                 urls.append(item["link"])
 
         return urls
+
+    def search(self, query: str, num_results: int = 10) -> list[str]:
+        """Execute Google search via Serper and return URLs."""
+        return self._search_with_retry(query, num_results)
 
 
 class MockSearchProvider(SearchProvider):
@@ -244,3 +286,118 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
             queries.append(f"largest builders {market}")
 
     return queries
+
+
+# =============================================================================
+# TALENT DISCOVERY QUERIES (Gauntlet Cohort 4)
+# =============================================================================
+
+# Core talent discovery queries - high signal surfaces
+TALENT_QUERY_TEMPLATES = {
+    # GitHub - primary signal source
+    "github_ai_agents": [
+        'site:github.com "agent" "openai"',
+        'site:github.com "llm" "agent"',
+        'site:github.com "langchain" project',
+        'site:github.com "gpt" "api" project',
+        'site:github.com "anthropic" "claude"',
+    ],
+    "github_demos": [
+        'site:github.com "streamlit" "llm"',
+        'site:github.com "gradio" "demo"',
+        'site:github.com "huggingface" project',
+        'site:github.com "openai" "demo"',
+    ],
+    "github_tooling": [
+        'site:github.com "cursor" "ai"',
+        'site:github.com "copilot" workflow',
+        'site:github.com "ai" "coding" "assistant"',
+    ],
+    # Blogs and writing - build in public signal
+    "blogs": [
+        '"learning in public" ai',
+        '"built with gpt" project',
+        '"building with ai" blog',
+        'site:substack.com "ai" "building"',
+        'site:substack.com "llm" "project"',
+        'site:medium.com "llm" "tutorial"',
+        'site:dev.to "openai" "project"',
+    ],
+    # Demos and apps
+    "demos": [
+        '"huggingface spaces" personal project',
+        '"streamlit" "ai" demo',
+        '"vercel" "ai" project',
+        '"replicate" demo project',
+    ],
+    # Adjacent communities
+    "communities": [
+        '"gauntlet ai" cohort',
+        '"buildspace" ai project',
+        '"replit" ai agent',
+        '"ai engineer" portfolio',
+    ],
+    # University CS programs (high CCAT correlation)
+    "universities": [
+        'site:github.com "stanford" "cs" project',
+        'site:github.com "mit" "eecs" project',
+        'site:github.com "cmu" "cs" project',
+        'site:github.com "berkeley" "eecs" project',
+        'site:github.com "cornell" "cs" project',
+        'site:github.com "university" "computer science" ai',
+    ],
+}
+
+
+def expand_talent_queries(prompt: str, filters: dict | None = None) -> list[str]:
+    """
+    Expand a talent discovery prompt into search queries.
+
+    Args:
+        prompt: The user's search prompt (e.g., "AI engineers building agents")
+        filters: Optional filters (e.g., {"university": "stanford"})
+
+    Returns:
+        List of search queries optimized for finding talent.
+    """
+    queries = []
+    filters = filters or {}
+
+    # Base prompt as-is
+    if prompt:
+        queries.append(prompt)
+        # Add some prompt variants
+        queries.append(f"{prompt} github")
+        queries.append(f"{prompt} portfolio")
+        queries.append(f"{prompt} project")
+
+    # Add all template queries by default
+    for category, category_queries in TALENT_QUERY_TEMPLATES.items():
+        # Check if we should filter by category
+        categories_filter = filters.get("categories")
+        if categories_filter and category not in categories_filter:
+            continue
+        queries.extend(category_queries)
+
+    # Add university-specific queries if filtered
+    university = filters.get("university")
+    if university:
+        queries.append(f'site:github.com "{university}" cs project')
+        queries.append(f'site:github.com "{university}" ai project')
+        queries.append(f'"{university}" computer science github')
+
+    # Add role-specific queries
+    role = filters.get("role")
+    if role:
+        queries.append(f'"{role}" ai project github')
+        queries.append(f'"{role}" llm portfolio')
+
+    # Dedupe while preserving order
+    seen = set()
+    unique_queries = []
+    for q in queries:
+        if q not in seen:
+            seen.add(q)
+            unique_queries.append(q)
+
+    return unique_queries

@@ -6,9 +6,9 @@
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
 | Author | Marcus |
-| Version | 0.4 |
+| Version | 0.5 |
 | Last Updated | December 30, 2025 |
-| Status | Draft |
+| Status | Active Development |
 
 ## One-liner
 A **reproducible lead-generation tool** that turns a "Google-style" prompt into a **CSV of potential B2B leads** (companies + decision makers + public contact channels), plus **advice on how to approach** each lead or segment.
@@ -303,3 +303,62 @@ and must fail closed (drop fields) if evidence is missing.
 - Directory/association queries (chamber, trade associations, top lists)
 
 **Estimated lead capacity:** 100-150+ per Caribbean run with new queries
+
+### 2025-12-30 — v0.4.1 Unlimited Results + Analysis Doc Fix
+**Delta:** Support "unlimited" results and keep analysis dump fully up-to-date.
+
+**Built:**
+- CLI: `shoudao run --max-results 0` now means **unlimited** (no slicing cap)
+- Pipeline: honors `RunConfig.max_results=None` (no cap) after scoring
+- Analysis doc generator now includes `ARCHITECTURE.md` in `SHOUDAO_ANALYSIS.md`
+
+**Best run:** 252 leads from a single Caribbean query (113 queries → 588 URLs → 92 pages → 252 leads)
+
+### 2025-12-30 — v0.5.0 Recipe System Release
+**Delta:** Complete recipe system for saving and rerunning queries.
+
+**Built:**
+- **Recipe YAML format** — `recipes/<slug>.yml` stores prompt, filters, context, and policy
+- **Recipe CLI commands** — Full CRUD operations for recipes:
+  - `shoudao recipe create` — Create recipe from CLI args
+  - `shoudao recipe list` — List all saved recipes
+  - `shoudao recipe show <slug>` — Show recipe details
+  - `shoudao recipe run <slug>` — Execute saved recipe
+  - `shoudao recipe delete <slug>` — Delete recipe
+- **Recipe model** — `QueryRecipe` Pydantic model with validation
+- **Recipe runner** — Executes saved recipes with all original parameters
+
+**Recipe format includes:**
+- Prompt and use case (leads/talent)
+- Filters (countries, industries, org_types)
+- Context (product, seller)
+- Policy (max_results, max_pages, blocked_domains, seed_sources)
+- Metadata (name, description, timestamps)
+
+**Benefits:**
+- Reproducible queries — rerun exact same query later
+- Shareable configurations — recipes can be versioned/shared
+- Faster iteration — no need to retype long CLI commands
+
+### Upcoming — v0.6.0 Gauntlet Talent Discovery (Planned)
+**Goal:** Adapt ShouDao for talent/candidate discovery, specifically for Gauntlet AI Cohort 4 applicant sourcing.
+
+**Key changes:**
+- New `Candidate` model (name, profile, education, experience, projects, salary band)
+- GitHub API integration for repo/commit/star signals
+- LinkedIn integration for education, experience, and salary estimation
+- Talent-specific query expansion (site:github.com, HuggingFace, Streamlit, blogs)
+- `shoudao talent` command (already implemented)
+- Skip advice generation (Gauntlet staff handles outreach)
+
+**Qualification signals:**
+- CS degree from good school
+- Engineering experience (2+ years)
+- Public AI/LLM project
+- Build-in-public posts
+- Salary likely <$150k (incentive alignment)
+
+**Ethical guardrails:**
+- No email guessing
+- Only publicly listed contact info
+- Gauntlet staff handles all outreach

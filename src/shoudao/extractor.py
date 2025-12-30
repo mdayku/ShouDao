@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .fetcher import FetchResult
 from .models import (
+    Candidate,
     Contact,
     ContactChannel,
     ContactChannelType,
@@ -404,3 +405,229 @@ def extract_phones_regex(text: str) -> list[str]:
     """Extract phone numbers using regex (fallback)."""
     phones = PHONE_REGEX.findall(text)
     return [p for p in phones if len(p.replace(" ", "").replace("-", "")) >= 7]
+
+
+# =============================================================================
+# TALENT EXTRACTION (Gauntlet Cohort 4)
+# =============================================================================
+
+
+class ExtractedCandidate(BaseModel):
+    """A candidate extracted from a page (GitHub, blog, portfolio)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Identity
+    name: str | None = None
+    primary_profile_url: str | None = None
+
+    # Contact channels (need at least email OR social)
+    email: str | None = None
+    github_url: str | None = None
+    linkedin_url: str | None = None
+    twitter_url: str | None = None
+    website_url: str | None = None
+
+    # Education
+    degree_signal: str | None = Field(
+        default=None, description="Education, e.g. 'CS degree from MIT' or 'Self-taught'"
+    )
+    university: str | None = None
+
+    # Experience
+    current_role: str | None = None
+    current_company: str | None = None
+    years_experience: int | None = None
+
+    # Public work (key signals)
+    repo_names: list[str] = Field(default_factory=list, description="GitHub repo names found")
+    has_ai_projects: bool = Field(default=False, description="Has AI/LLM related projects")
+    has_demos: bool = Field(default=False, description="Has deployed demos/apps")
+    has_blog: bool = Field(default=False, description="Has technical blog/writing")
+
+
+class TalentExtractionResult(BaseModel):
+    """Result of extracting candidates from a page."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[ExtractedCandidate] = Field(default_factory=list)
+    is_relevant: bool = Field(default=False, description="Page has talent signals")
+    evidence_snippet: str = Field(default="", max_length=500)
+
+
+TALENT_EXTRACTION_PROMPT = """You are a talent scout looking for software engineers who would be good candidates for an AI-focused accelerator program.
+
+Extract candidate information from this page. Look for:
+1. Individual developers/engineers (NOT companies)
+2. People building with AI/LLM tools
+3. GitHub profiles, personal sites, portfolios
+4. Education and work experience signals
+
+Qualification signals (look for these):
+- CS degree or equivalent background
+- Engineering work experience
+- Public AI/LLM projects (agents, demos, tools)
+- Technical blog posts or "building in public" content
+- GitHub activity with real projects
+
+Extract ALL contact channels you find:
+- Email addresses
+- GitHub profile URLs
+- LinkedIn profile URLs
+- Twitter/X profile URLs
+- Personal website/blog URLs
+
+IMPORTANT: A candidate is qualified if we have at least:
+- Email address, OR
+- Any social media profile (GitHub, LinkedIn, Twitter)
+
+We do NOT require name + phone - just a way to reach them.
+
+Page content:
+{content}
+"""
+
+
+class TalentExtractor:
+    """LLM-based candidate extractor for talent discovery."""
+
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY not set")
+        self.client = OpenAI(api_key=self.api_key)
+        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
+
+    def extract(self, fetch_result: FetchResult) -> TalentExtractionResult:
+        """Extract candidates from a fetched page."""
+        if not fetch_result.success or not fetch_result.text:
+            return TalentExtractionResult(is_relevant=False)
+
+        # Truncate content to avoid token limits
+        content = fetch_result.text[:8000]
+
+        try:
+            completion = self.client.beta.chat.completions.parse(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a talent scout extracting candidate information from webpages. Focus on individuals (not companies) who build software, especially AI/LLM projects.",
+                    },
+                    {
+                        "role": "user",
+                        "content": TALENT_EXTRACTION_PROMPT.format(content=content),
+                    },
+                ],
+                response_format=TalentExtractionResult,
+            )
+            return completion.choices[0].message.parsed
+        except Exception as e:
+            print(f"Talent extraction error for {fetch_result.url}: {e}")
+            return TalentExtractionResult(is_relevant=False)
+
+    def extraction_to_candidates(
+        self,
+        extraction: TalentExtractionResult,
+        source_url: str,
+    ) -> list[Candidate]:
+        """Convert extraction result to Candidate objects."""
+        if not extraction.is_relevant:
+            return []
+
+        candidates = []
+        evidence = Evidence(
+            url=source_url,  # type: ignore
+            snippet=extraction.evidence_snippet[:500] if extraction.evidence_snippet else None,
+        )
+
+        for ec in extraction.candidates:
+            # Clean all values
+            email = _clean_value(ec.email)
+            github_url = _clean_value(ec.github_url)
+            linkedin_url = _clean_value(ec.linkedin_url)
+            twitter_url = _clean_value(ec.twitter_url)
+            website_url = _clean_value(ec.website_url)
+
+            # Determine primary profile URL
+            primary_profile = _clean_value(ec.primary_profile_url)
+            if not primary_profile:
+                # Fallback priority: GitHub > LinkedIn > Twitter > Website > Source
+                primary_profile = github_url or linkedin_url or twitter_url or website_url or source_url
+
+            # Check if contactable (email OR any social)
+            is_contactable = bool(email or github_url or linkedin_url or twitter_url)
+
+            if not is_contactable:
+                continue  # Skip candidates we can't contact
+
+            # Calculate AI signal score based on extracted signals
+            ai_signal_score = 0.0
+            if ec.has_ai_projects:
+                ai_signal_score += 0.5
+            if len(ec.repo_names) >= 3:
+                ai_signal_score += 0.3
+            if ec.has_demos:
+                ai_signal_score += 0.2
+            ai_signal_score = min(ai_signal_score, 1.0)
+
+            # Calculate build-in-public score
+            build_in_public_score = 0.0
+            if ec.has_blog:
+                build_in_public_score += 0.4
+            if github_url:
+                build_in_public_score += 0.3
+            if twitter_url:
+                build_in_public_score += 0.2
+            if len(ec.repo_names) > 0:
+                build_in_public_score += 0.1
+            build_in_public_score = min(build_in_public_score, 1.0)
+
+            # Build candidate
+            candidate = Candidate(
+                name=_clean_value(ec.name),
+                primary_profile=primary_profile,
+                email=email,
+                github_url=github_url,
+                linkedin_url=linkedin_url,
+                twitter_url=twitter_url,
+                website_url=website_url,
+                degree_signal=_clean_value(ec.degree_signal),
+                university=_clean_value(ec.university),
+                current_role=_clean_value(ec.current_role),
+                current_company=_clean_value(ec.current_company),
+                years_experience=ec.years_experience,
+                public_repos=ec.repo_names,
+                ai_signal_score=ai_signal_score,
+                build_in_public_score=build_in_public_score,
+                evidence=[evidence],
+                extracted_from_url=source_url,
+            )
+            candidates.append(candidate)
+
+        return candidates
+
+
+# GitHub URL regex for extraction
+GITHUB_URL_REGEX = re.compile(r"https?://github\.com/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)?")
+LINKEDIN_URL_REGEX = re.compile(r"https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_-]+")
+TWITTER_URL_REGEX = re.compile(r"https?://(?:www\.)?(?:twitter|x)\.com/[a-zA-Z0-9_]+")
+
+
+def extract_github_urls_regex(text: str) -> list[str]:
+    """Extract GitHub URLs using regex (fallback)."""
+    urls = GITHUB_URL_REGEX.findall(text)
+    return list(set(urls))
+
+
+def extract_linkedin_urls_regex(text: str) -> list[str]:
+    """Extract LinkedIn URLs using regex (fallback)."""
+    urls = LINKEDIN_URL_REGEX.findall(text)
+    return list(set(urls))
+
+
+def extract_twitter_urls_regex(text: str) -> list[str]:
+    """Extract Twitter/X URLs using regex (fallback)."""
+    urls = TWITTER_URL_REGEX.findall(text)
+    return list(set(urls))

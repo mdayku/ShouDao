@@ -39,7 +39,7 @@ def main() -> None:
     "-n",
     type=int,
     default=50,
-    help="Maximum number of leads to return (default: 50)",
+    help="Maximum number of leads to return; use 0 for unlimited (default: 50)",
 )
 @click.option("--country", multiple=True, help="Filter by country (can specify multiple)")
 @click.option("--industry", multiple=True, help="Filter by industry (can specify multiple)")
@@ -62,6 +62,9 @@ def run(
     from .world_context import WorldContext
 
     output_dir = Path(output)
+    max_results_opt: int | None = max_results
+    if max_results <= 0:
+        max_results_opt = None
 
     # If region specified, generate derived prompt from world context
     final_prompt = prompt
@@ -86,7 +89,7 @@ def run(
             prompt=final_prompt,
             countries=list(country),
             industries=list(industry),
-            max_results=max_results,
+            max_results=max_results_opt,
             output_dir=output_dir,
             product_context=product_context,
             seller_context=seller_context,
@@ -135,6 +138,71 @@ def check() -> None:
 
 
 @main.command()
+@click.option("--prompt", "-p", required=True, help="What kind of candidates you're looking for")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default="runs",
+    help="Output directory for run artifacts (default: runs/)",
+)
+@click.option(
+    "--max-results",
+    "-n",
+    type=int,
+    default=50,
+    help="Maximum number of candidates to return; use 0 for unlimited (default: 50)",
+)
+def talent(
+    prompt: str,
+    output: str,
+    max_results: int,
+) -> None:
+    """Run a talent discovery query (Gauntlet Cohort 4 style).
+
+    Finds candidates based on public signals:
+    - GitHub repos and AI/LLM projects
+    - Technical blogs and "building in public"
+    - Education and experience signals
+    - Salary band estimation
+
+    A candidate is qualified if we can contact them (email OR social media).
+    """
+    from .pipeline import run_talent_pipeline
+
+    output_dir = Path(output)
+    max_results_opt: int | None = max_results
+    if max_results <= 0:
+        max_results_opt = None
+
+    try:
+        result = run_talent_pipeline(
+            prompt=prompt,
+            output_dir=output_dir,
+            max_results=max_results_opt,
+        )
+
+        click.echo(f"\nFound {len(result.candidates)} candidates")
+        click.echo(f"  Tier A: {result.tier_a_count}")
+        click.echo(f"  Tier B: {result.tier_b_count}")
+        click.echo(f"  Tier C: {result.tier_c_count}")
+        click.echo(f"  Contactable: {result.contactable_candidates}")
+
+        if result.errors:
+            click.echo(f"\nWarnings: {len(result.errors)}")
+            for err in result.errors[:3]:
+                click.echo(f"  - {err}")
+
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        click.echo("Make sure OPENAI_API_KEY and SERPER_API_KEY are set in .env", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Pipeline error: {e}", err=True)
+        sys.exit(1)
+
+
+@main.command()
 @click.option("--region", "-r", default=None, help="Show countries in a specific region")
 @click.option("--list-regions", is_flag=True, help="List available regions")
 def world(region: str | None, list_regions: bool) -> None:
@@ -177,6 +245,211 @@ def world(region: str | None, list_regions: bool) -> None:
     else:
         click.echo("Use --list-regions to see available regions")
         click.echo("Use --region <name> to see countries in that region")
+
+
+# =============================================================================
+# RECIPE COMMANDS
+# =============================================================================
+
+
+@main.group()
+def recipe() -> None:
+    """Manage saved recipes (query configurations)."""
+    pass
+
+
+@recipe.command("list")
+def recipe_list() -> None:
+    """List all saved recipes."""
+    from .recipe import list_recipes
+
+    recipes = list_recipes()
+
+    if not recipes:
+        click.echo("No recipes found. Create one with: shoudao recipe create")
+        return
+
+    click.echo(f"\nSaved Recipes ({len(recipes)})\n")
+    click.echo(f"{'Slug':<25} {'Use Case':<10} {'Prompt'}")
+    click.echo("-" * 70)
+
+    for r in recipes:
+        prompt_preview = r.prompt[:40] + "..." if len(r.prompt) > 40 else r.prompt
+        click.echo(f"{r.slug:<25} {r.use_case:<10} {prompt_preview}")
+
+
+@recipe.command("show")
+@click.argument("slug")
+def recipe_show(slug: str) -> None:
+    """Show details of a recipe."""
+    from .recipe import load_recipe
+
+    try:
+        r = load_recipe(slug)
+    except FileNotFoundError:
+        click.echo(f"Recipe not found: {slug}", err=True)
+        sys.exit(1)
+
+    click.echo(f"\nRecipe: {r.name or r.slug}")
+    click.echo("-" * 40)
+    click.echo(f"Slug:       {r.slug}")
+    click.echo(f"Use case:   {r.use_case}")
+    click.echo(f"Prompt:     {r.prompt}")
+
+    if r.filters.countries:
+        click.echo(f"Countries:  {', '.join(r.filters.countries)}")
+    if r.filters.industries:
+        click.echo(f"Industries: {', '.join(r.filters.industries)}")
+
+    if r.context.product:
+        click.echo(f"Product:    {r.context.product}")
+    if r.context.seller:
+        click.echo(f"Seller:     {r.context.seller}")
+
+    click.echo(f"Max results: {r.policy.max_results or 'unlimited'}")
+
+    if r.description:
+        click.echo(f"\nDescription: {r.description}")
+
+
+@recipe.command("create")
+@click.option("--slug", "-s", required=True, help="Unique identifier for the recipe")
+@click.option("--prompt", "-p", required=True, help="Search prompt")
+@click.option(
+    "--use-case",
+    "-u",
+    type=click.Choice(["leads", "talent"]),
+    default="leads",
+    help="Use case type",
+)
+@click.option("--name", "-n", default="", help="Human-readable name")
+@click.option("--country", multiple=True, help="Country filter (can specify multiple)")
+@click.option("--industry", multiple=True, help="Industry filter (can specify multiple)")
+@click.option("--product-context", default="", help="Product context for advice")
+@click.option("--seller-context", default="", help="Seller context for advice")
+@click.option("--max-results", type=int, default=50, help="Max results (0 for unlimited)")
+def recipe_create(
+    slug: str,
+    prompt: str,
+    use_case: str,
+    name: str,
+    country: tuple[str, ...],
+    industry: tuple[str, ...],
+    product_context: str,
+    seller_context: str,
+    max_results: int,
+) -> None:
+    """Create a new recipe."""
+    from .recipe import create_recipe_from_prompt, load_recipe, save_recipe
+
+    # Check if already exists
+    try:
+        load_recipe(slug)
+        click.echo(f"Recipe already exists: {slug}", err=True)
+        click.echo("Use a different slug or delete the existing recipe first.", err=True)
+        sys.exit(1)
+    except FileNotFoundError:
+        pass  # Good, doesn't exist yet
+
+    max_results_opt = max_results if max_results > 0 else None
+
+    recipe_obj = create_recipe_from_prompt(
+        slug=slug,
+        prompt=prompt,
+        use_case=use_case,  # type: ignore
+        name=name,
+        countries=list(country),
+        industries=list(industry),
+        product_context=product_context,
+        seller_context=seller_context,
+        max_results=max_results_opt,
+    )
+
+    path = save_recipe(recipe_obj)
+    click.echo(f"Recipe saved: {path}")
+    click.echo(f"\nRun with: shoudao recipe run {slug}")
+
+
+@recipe.command("run")
+@click.argument("slug")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default="runs",
+    help="Output directory (default: runs/)",
+)
+def recipe_run(slug: str, output: str) -> None:
+    """Run a saved recipe."""
+    from .pipeline import run_pipeline, run_talent_pipeline
+    from .recipe import load_recipe
+
+    try:
+        r = load_recipe(slug)
+    except FileNotFoundError:
+        click.echo(f"Recipe not found: {slug}", err=True)
+        click.echo("Use 'shoudao recipe list' to see available recipes.", err=True)
+        sys.exit(1)
+
+    output_dir = Path(output)
+
+    click.echo(f"[ShouDao] Running recipe: {r.name or r.slug}")
+    click.echo(f"[ShouDao] Use case: {r.use_case}")
+    click.echo(f"[ShouDao] Prompt: {r.prompt[:80]}...")
+
+    try:
+        if r.use_case == "talent":
+            result = run_talent_pipeline(
+                prompt=r.prompt,
+                output_dir=output_dir,
+                max_results=r.policy.max_results,
+            )
+            click.echo(f"\nFound {len(result.candidates)} candidates")
+            click.echo(f"  Tier A: {result.tier_a_count}")
+            click.echo(f"  Tier B: {result.tier_b_count}")
+            click.echo(f"  Tier C: {result.tier_c_count}")
+        else:
+            result = run_pipeline(
+                prompt=r.prompt,
+                countries=r.filters.countries,
+                industries=r.filters.industries,
+                max_results=r.policy.max_results,
+                output_dir=output_dir,
+                product_context=r.context.product,
+                seller_context=r.context.seller,
+                seed_sources=r.policy.seed_sources,
+            )
+            click.echo(f"\nGenerated {len(result.leads)} leads")
+
+        if result.errors:
+            click.echo(f"Warnings: {len(result.errors)}")
+
+    except Exception as e:
+        click.echo(f"Pipeline error: {e}", err=True)
+        sys.exit(1)
+
+
+@recipe.command("delete")
+@click.argument("slug")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def recipe_delete(slug: str, yes: bool) -> None:
+    """Delete a recipe."""
+    from .recipe import delete_recipe, load_recipe
+
+    try:
+        r = load_recipe(slug)
+    except FileNotFoundError:
+        click.echo(f"Recipe not found: {slug}", err=True)
+        sys.exit(1)
+
+    if not yes:
+        click.confirm(f"Delete recipe '{r.name or r.slug}'?", abort=True)
+
+    if delete_recipe(slug):
+        click.echo(f"Deleted: {slug}")
+    else:
+        click.echo(f"Failed to delete: {slug}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
