@@ -220,8 +220,27 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
             "Barbados",
         ]
         for market in top_markets:
+            # Core contractor queries
             queries.append(f"construction company hotel resort {market}")
             queries.append(f"general contractor commercial {market}")
             queries.append(f"building contractor {market}")
+            # Design-build and renovation (Task 14.2.4)
+            queries.append(f"design build firm {market}")
+            queries.append(f"hotel renovation contractor {market}")
+            queries.append(f"commercial renovation {market}")
+
+        # Directory harvesting queries (Tasks 14.3.1-14.3.3)
+        for market in top_markets:
+            # Chamber of commerce directories
+            queries.append(f"chamber of commerce {market} directory")
+            queries.append(f"chamber of commerce {market} members construction")
+            # Trade association member lists
+            queries.append(f"contractors association {market} members")
+            queries.append(f"builders association {market} directory")
+            queries.append(f"construction association {market}")
+            # Top contractors lists
+            queries.append(f"top contractors {market}")
+            queries.append(f"top construction companies {market}")
+            queries.append(f"largest builders {market}")
 
     return queries

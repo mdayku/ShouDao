@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .advisor import Advisor
-from .dedupe import apply_buyer_gate, dedupe_leads, score_all_leads
+from .dedupe import apply_buyer_gate, dedupe_all_contacts, dedupe_leads, score_all_leads
 from .exporter import export_csv, export_excel, export_json, generate_report
 from .extractor import Extractor
 from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
+from .logger import ProgressLogger
 from .models import Lead, RunConfig, RunResult
 from .search import expand_prompt_to_queries, get_search_provider
 from .sources import SourcesLog
@@ -20,9 +21,10 @@ from .sources import SourcesLog
 class Pipeline:
     """Main pipeline orchestrator."""
 
-    def __init__(self, config: RunConfig):
+    def __init__(self, config: RunConfig, verbose: bool = False):
         self.config = config
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+        self.logger = ProgressLogger(self.run_id, verbose=verbose)
 
     def run(self, output_dir: Path | None = None) -> RunResult:
         """Execute the full pipeline."""
@@ -38,11 +40,14 @@ class Pipeline:
             prompt=self.config.prompt,
         )
 
-        print(f"[ShouDao] Starting run: {self.run_id}")
-        print(f"[ShouDao] Prompt: {self.config.prompt}")
+        self.logger.phase("Starting run", f"ID={self.run_id}")
+        if len(self.config.prompt) > 100:
+            print(f"  Prompt: {self.config.prompt[:100]}...")
+        else:
+            print(f"  Prompt: {self.config.prompt}")
 
         # Step 1: Expand prompt to queries
-        print("[ShouDao] Step 1/6: Expanding prompt to queries...")
+        self.logger.phase("Query expansion", "Step 1/6")
         filters_dict = {
             "countries": self.config.countries,
             "industries": self.config.industries,
@@ -51,7 +56,7 @@ class Pipeline:
         print(f"  Generated {len(queries)} search queries")
 
         # Step 2: Search for URLs
-        print("[ShouDao] Step 2/6: Searching for sources...")
+        self.logger.phase("Searching for sources", "Step 2/6")
         search_provider = get_search_provider(self.config)
         provider_name = self.config.search_provider
         all_urls = []
@@ -84,7 +89,7 @@ class Pipeline:
         print(f"  Total unique URLs after filtering: {len(all_urls)}")
 
         # Step 3: Fetch pages
-        print("[ShouDao] Step 3/6: Fetching pages...")
+        self.logger.phase("Fetching pages", f"Step 3/6 - {len(all_urls)} URLs")
         fetcher = Fetcher(FetcherConfig(delay_between_requests=1.5))
         fetch_results = fetcher.fetch_many(all_urls[:100])  # Cap at 100 for 100+ lead runs
 
@@ -113,7 +118,7 @@ class Pipeline:
         print(f"  Fetched {len(successful)}/{len(all_urls)} pages")
 
         # Step 4: Extract leads
-        print("[ShouDao] Step 4/6: Extracting leads...")
+        self.logger.phase("Extracting leads", f"Step 4/6 - {len(successful)} pages")
         extractor = Extractor()
         all_leads: list[Lead] = []
 
@@ -139,8 +144,9 @@ class Pipeline:
         print(f"  Total raw leads: {len(all_leads)}")
 
         # Step 5: Dedupe, filter, and score
-        print("[ShouDao] Step 5/6: Deduplicating, filtering, and scoring...")
+        self.logger.phase("Deduplication and scoring", f"Step 5/6 - {len(all_leads)} raw leads")
         leads = dedupe_leads(all_leads)
+        leads = dedupe_all_contacts(leads)  # Task 7.1.3: dedupe contacts by email
         pre_filter_count = len(leads)
 
         # Apply buyer-only gate (drops exporters, flags unknowns)
@@ -153,7 +159,7 @@ class Pipeline:
         print(f"  Leads after buyer gate: {len(leads)} (dropped {filtered_count} non-buyers)")
 
         # Step 6: Generate advice
-        print("[ShouDao] Step 6/6: Generating outreach advice...")
+        self.logger.phase("Generating advice", f"Step 6/6 - {len(leads)} leads")
         advisor = Advisor()
         leads = advisor.advise_all(
             leads,
@@ -185,9 +191,7 @@ class Pipeline:
             generate_report(result, report_path)
             sources_log.save(sources_path)
 
-            print("\n[ShouDao] Run complete!")
-            print(f"  Output: {run_dir}")
-            print(f"  Leads: {len(leads)}")
+            self.logger.finish(len(leads), str(run_dir))
             print(f"  CSV: {csv_path}")
             print(f"  Sources: {sources_path}")
 

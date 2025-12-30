@@ -206,6 +206,11 @@ class Lead(BaseModel):
         default=None, description="The prompt that generated this lead"
     )
 
+    # Score explanation (Task 7.2.2)
+    score_contributions: dict[str, float] = Field(
+        default_factory=dict, description="Breakdown of what contributed to confidence score"
+    )
+
     def has_usable_contact(self) -> bool:
         """Check if lead has at least one usable contact channel."""
         for contact in self.contacts:

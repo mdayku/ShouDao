@@ -6,8 +6,8 @@
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
 | Author | Marcus |
-| Version | 0.3 |
-| Last Updated | December 29, 2025 |
+| Version | 0.4 |
+| Last Updated | December 30, 2025 |
 | Status | Draft |
 
 ## One-liner
@@ -284,3 +284,22 @@ and must fail closed (drop fields) if evidence is missing.
 - Lead-centric extraction schema (contacts nested under org) prevents misattribution
 - Product/seller context dramatically improves advice relevance
 - sources.json provides full audit trail for debugging
+
+### 2025-12-30 — v0.2.0 Recall & Observability Release
+**Delta:** Completed Epic 14 (Recall Improvements) and added observability.
+
+**Built:**
+- **Directory harvesting queries** — chamber of commerce, trade associations, top contractors
+- **Design-build/hotel-renovation queries** — expanded buyer-type coverage
+- **Tier breakdown in report.md** — A/B/C distribution visible in reports
+- **Duplicate contact detection** — prevents same email appearing multiple times per lead
+- **Score explanation** — `score_contributions` field explains confidence calculation
+- **Structured logging** — `ProgressLogger` with phases, progress, heartbeats
+
+**Query expansion now generates 80+ queries per Caribbean run:**
+- Product-specific queries (windows, doors, glazing)
+- Language variants (Spanish, French, Dutch)
+- Contractor/builder expansion (hotel renovation, design-build)
+- Directory/association queries (chamber, trade associations, top lists)
+
+**Estimated lead capacity:** 100-150+ per Caribbean run with new queries

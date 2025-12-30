@@ -96,12 +96,14 @@ class TestScoreLead:
 
     def test_score_with_email(self, sample_lead: Lead) -> None:
         """Test scoring a lead with email."""
-        score = score_lead(sample_lead)
+        score, contributions = score_lead(sample_lead)
         assert score > 0.5  # Has email, role, website
+        assert "email_with_evidence" in contributions
 
     def test_score_minimal(self, sample_evidence: Evidence) -> None:
         """Test scoring a minimal lead."""
         org = Organization(name="Minimal", evidence=[sample_evidence])
         lead = Lead(organization=org)
-        score = score_lead(lead)
+        score, contributions = score_lead(lead)
         assert score < 0.5  # No contacts, no website
+        assert isinstance(contributions, dict)

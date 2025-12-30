@@ -231,6 +231,7 @@ def generate_report(result: RunResult, output: Path) -> None:
     by_country: dict[str, int] = {}
     by_type: dict[str, int] = {}
     by_industry: dict[str, int] = {}
+    by_tier: dict[str, int] = {"A": 0, "B": 0, "C": 0, "excluded": 0}
 
     for lead in result.leads:
         country = lead.organization.country or "Unknown"
@@ -238,6 +239,9 @@ def generate_report(result: RunResult, output: Path) -> None:
         by_type[lead.organization.org_type] = by_type.get(lead.organization.org_type, 0) + 1
         for ind in lead.organization.industries:
             by_industry[ind] = by_industry.get(ind, 0) + 1
+        # Track tier distribution (Task 14.1.4)
+        tier = lead.buyer_tier or "excluded"
+        by_tier[tier] = by_tier.get(tier, 0) + 1
 
     report = f"""# ShouDao Run Report
 
@@ -262,6 +266,23 @@ def generate_report(result: RunResult, output: Path) -> None:
 """
     for country, count in sorted(by_country.items(), key=lambda x: -x[1]):
         report += f"| {country} | {count} |\n"
+
+    # Tier breakdown (Task 14.1.4)
+    report += """
+## Leads by Buyer Tier
+| Tier | Description | Count |
+|---|---|---|
+"""
+    tier_descriptions = {
+        "A": "High confidence buyer",
+        "B": "Probable buyer (needs review)",
+        "C": "Needs verification",
+        "excluded": "Non-buyer (dropped)",
+    }
+    for tier in ["A", "B", "C", "excluded"]:
+        count = by_tier.get(tier, 0)
+        desc = tier_descriptions.get(tier, "")
+        report += f"| {tier} | {desc} | {count} |\n"
 
     report += """
 ## Leads by Type

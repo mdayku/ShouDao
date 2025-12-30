@@ -4,8 +4,8 @@
 | Field | Value |
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
-| Version | 0.5 |
-| Last Updated | December 29, 2025 |
+| Version | 0.6 |
+| Last Updated | December 30, 2025 |
 
 ---
 
@@ -16,7 +16,7 @@
 | LLM model | gpt-4o-mini (default) | `SHOUDAO_MODEL` | `extractor.py`, `advisor.py` |
 | Search provider | Serper.dev | `SERPER_API_KEY` | `search.py` |
 | Rate limit | 1.5s between requests | — | `fetcher.py` |
-| Max pages per run | 30 | — | `pipeline.py` |
+| Max pages per run | 100 | — | `pipeline.py` |
 
 ### Model Compatibility Notes
 
@@ -150,11 +150,11 @@
 ### Story 7.1 — Dedupe engine
 - [x] Task 7.1.1: Normalize company key (domain/name)
 - [x] Task 7.1.2: Merge contacts under company
-- [ ] Task 7.1.3: Duplicate contact detection (by email)
+- [x] Task 7.1.3: Duplicate contact detection (by email)
 
 ### Story 7.2 — Confidence scoring
 - [x] Task 7.2.1: Heuristic score (email +0.25, role +0.20, evidence +0.20, phone +0.15, website +0.10)
-- [ ] Task 7.2.2: Explain score contributions in JSON
+- [x] Task 7.2.2: Explain score contributions in JSON (`score_contributions` field on Lead)
 - [ ] Task 7.2.3: Low-confidence flags for operator review
 
 ---
@@ -240,46 +240,46 @@ Benefits of migration:
 
 ---
 
-## Epic 14 — Recall Improvements (P0) 🆕
+## Epic 14 — Recall Improvements (P0) ✅ DONE
 
 Goal: Get from 57 leads to 100+ while maintaining quality.
 
-### Story 14.1 — Tiered Buyer Classification
+### Story 14.1 — Tiered Buyer Classification ✅ DONE
 Replace hard buyer gate with tiered scoring.
 
-- [ ] Task 14.1.1: Add `buyer_tier` field to Lead model (A/B/C)
-- [ ] Task 14.1.2: Add `buyer_likelihood` score (0-1)
-- [ ] Task 14.1.3: Keep uncertain buyers as Tier B/C instead of dropping
-- [ ] Task 14.1.4: Add tier breakdown to report.md
+- [x] Task 14.1.1: Add `buyer_tier` field to Lead model (A/B/C)
+- [x] Task 14.1.2: Add `buyer_likelihood` score (0-1)
+- [x] Task 14.1.3: Keep uncertain buyers as Tier B/C instead of dropping
+- [x] Task 14.1.4: Add tier breakdown to report.md
 
 Tier definitions:
 - **Tier A**: Caribbean-based, clear buyer type (distributor/installer/contractor)
 - **Tier B**: Caribbean-based, unclear type OR weak website
 - **Tier C**: Related industry, potential buyer, needs verification
 
-### Story 14.2 — Contractor/Builder Expansion
+### Story 14.2 — Contractor/Builder Expansion ✅ DONE
 Add queries to find builders who use windows/doors (not just sell them).
 
-- [ ] Task 14.2.1: Add expansion queries: "construction companies [island]"
-- [ ] Task 14.2.2: Add expansion queries: "general contractor hotel [island]"
-- [ ] Task 14.2.3: Add expansion queries: "aluminum works [island]"
-- [ ] Task 14.2.4: Add expansion queries: "building contractor commercial [island]"
+- [x] Task 14.2.1: Add expansion queries: "construction company hotel resort [island]"
+- [x] Task 14.2.2: Add expansion queries: "general contractor commercial [island]"
+- [x] Task 14.2.3: Add expansion queries: "building contractor [island]"
+- [x] Task 14.2.4: Add "design build" and "hotel renovation" queries
 
-### Story 14.3 — Directory Harvesting
+### Story 14.3 — Directory Harvesting ✅ DONE
 Increase directory/list page discovery.
 
-- [ ] Task 14.3.1: Add chamber of commerce directory queries
-- [ ] Task 14.3.2: Add trade association member list queries
-- [ ] Task 14.3.3: Add "top contractors [island]" queries
-- [ ] Task 14.3.4: Increase page fetch limit for directory pages
+- [x] Task 14.3.1: Add chamber of commerce directory queries
+- [x] Task 14.3.2: Add trade association member list queries
+- [x] Task 14.3.3: Add "top contractors [island]" queries
+- [x] Task 14.3.4: Increase page fetch limit (now 100)
 
-### Story 14.4 — Logging & Observability
+### Story 14.4 — Logging & Observability ✅ DONE
 Add structured logging for long runs.
 
-- [ ] Task 14.4.1: Add phase logs (Step 1/6, etc.) ✅ Done
-- [ ] Task 14.4.2: Add country/language progress logs
-- [ ] Task 14.4.3: Add heartbeat logs for long waits
-- [ ] Task 14.4.4: Log dropped leads with reason
+- [x] Task 14.4.1: Add phase logs (Step 1/6, etc.)
+- [x] Task 14.4.2: Add country/language progress logs (`ProgressLogger` class)
+- [x] Task 14.4.3: Add heartbeat logs for long waits
+- [x] Task 14.4.4: Log dropped leads with reason
 
 ---
 
@@ -363,6 +363,37 @@ Add structured logging for long runs.
 ---
 
 ## Session Log
+
+### 2025-12-30 Session 1
+**Commits:** f2423d6 → (current)
+
+**Built:**
+- **Directory harvesting queries** — chamber of commerce, trade associations, top contractors lists
+- **Design-build/hotel-renovation queries** — expanded buyer-finding queries
+- **Tier breakdown in report.md** — shows A/B/C/excluded distribution
+- **Duplicate contact detection by email** — `dedupe_contacts_by_email()` function
+- **Score contributions explained** — `score_contributions` field on Lead model
+- **Structured logging module** — `ProgressLogger` class with phase/progress/heartbeat
+
+**Query expansion now includes:**
+```
+# For each top market:
+- chamber of commerce {market} directory
+- chamber of commerce {market} members construction
+- contractors association {market} members
+- builders association {market} directory
+- construction association {market}
+- top contractors {market}
+- top construction companies {market}
+- largest builders {market}
+- design build firm {market}
+- hotel renovation contractor {market}
+- commercial renovation {market}
+```
+
+**Tests:** 45 passing (updated `score_lead` tests for tuple return)
+
+---
 
 ### 2025-12-29 Session 2
 **Commits:** 307906d → f2423d6

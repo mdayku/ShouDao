@@ -313,10 +313,10 @@ def apply_buyer_gate(leads: list[Lead]) -> list[Lead]:
     return filtered
 
 
-def score_lead(lead: Lead) -> float:
+def score_lead(lead: Lead) -> tuple[float, dict[str, float]]:
     """
     Score a lead based on evidence quality and buyer relevance.
-    Returns 0-1.
+    Returns (score 0-1, contributions dict).
 
     Scoring factors:
     - Contact quality (email, phone, role)
@@ -327,42 +327,50 @@ def score_lead(lead: Lead) -> float:
     - Domain misalignment (penalty)
     """
     score = 0.0
+    contributions: dict[str, float] = {}
 
     # +0.20 if email found with evidence
     has_email = any(ch.type == "email" and ch.evidence for c in lead.contacts for ch in c.channels)
     if has_email:
         score += 0.20
+        contributions["email_with_evidence"] = 0.20
 
     # +0.15 if role matches target roles
     target_roles = {"owner", "exec", "founder", "ceo", "director", "procurement", "sales"}
     for contact in lead.contacts:
         if contact.role_category in target_roles:
             score += 0.15
+            contributions["target_role"] = 0.15
             break
 
     # +0.15 if multiple evidence sources
     evidence_count = len(lead.evidence) + len(lead.organization.evidence)
     if evidence_count >= 2:
         score += 0.15
+        contributions["multiple_evidence"] = 0.15
 
     # +0.10 if phone found
     has_phone = any(ch.type == "phone" for c in lead.contacts for ch in c.channels)
     if has_phone:
         score += 0.10
+        contributions["phone"] = 0.10
 
     # +0.05 if website exists
     if lead.organization.website:
         score += 0.05
+        contributions["website"] = 0.05
 
     # +0.05 if description exists
     if lead.organization.description:
         score += 0.05
+        contributions["description"] = 0.05
 
     # === BUYER RELEVANCE BONUSES ===
 
     # +0.20 if Caribbean-based
     if is_caribbean_country(lead.organization.country):
         score += 0.20
+        contributions["caribbean_location"] = 0.20
 
     # +0.10 if mentions hotels/resorts/hurricane
     desc = (lead.organization.description or "").lower()
@@ -374,29 +382,64 @@ def score_lead(lead: Lead) -> float:
 
     if any(sig in combined_text for sig in hotel_signals):
         score += 0.10
+        contributions["hotel_resort_signal"] = 0.10
 
     if any(sig in combined_text for sig in hurricane_signals):
         score += 0.10
+        contributions["hurricane_signal"] = 0.10
 
     # === PENALTIES ===
 
     # -0.25 if domain not aligned
     if not lead.domain_aligned:
         score -= 0.25
+        contributions["domain_misaligned"] = -0.25
 
     # -0.20 if exporter signals detected
     if has_exporter_signals(lead):
         score -= 0.20
+        contributions["exporter_signals"] = -0.20
 
     # -0.10 if country is unknown (less trustworthy)
     if not lead.organization.country or lead.organization.country.lower() in {"unknown", ""}:
         score -= 0.10
+        contributions["unknown_country"] = -0.10
 
-    return max(min(score, 1.0), 0.0)  # Clamp to 0-1
+    return max(min(score, 1.0), 0.0), contributions  # Clamp to 0-1
 
 
 def score_all_leads(leads: list[Lead]) -> list[Lead]:
-    """Score all leads and update their confidence."""
+    """Score all leads and update their confidence + score contributions."""
     for lead in leads:
-        lead.confidence = score_lead(lead)
+        score, contributions = score_lead(lead)
+        lead.confidence = score
+        lead.score_contributions = contributions
     return leads
+
+
+def dedupe_contacts_by_email(lead: Lead) -> Lead:
+    """
+    Remove duplicate contacts from a lead based on email address.
+    Keeps the first contact for each email (Task 7.1.3).
+    """
+    seen_emails: set[str] = set()
+    unique_contacts = []
+
+    for contact in lead.contacts:
+        # Get all emails for this contact
+        contact_emails = [ch.value.lower() for ch in contact.channels if ch.type == "email"]
+
+        # Check if any email is a duplicate
+        is_duplicate = any(email in seen_emails for email in contact_emails)
+
+        if not is_duplicate:
+            unique_contacts.append(contact)
+            seen_emails.update(contact_emails)
+
+    lead.contacts = unique_contacts
+    return lead
+
+
+def dedupe_all_contacts(leads: list[Lead]) -> list[Lead]:
+    """Dedupe contacts within each lead by email."""
+    return [dedupe_contacts_by_email(lead) for lead in leads]
