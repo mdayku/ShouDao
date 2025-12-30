@@ -10,6 +10,7 @@ Key design:
 
 import os
 import re
+from typing import Literal
 from urllib.parse import urlparse
 
 from openai import OpenAI
@@ -76,11 +77,18 @@ class ExtractedLead(BaseModel):
     contacts: list[ExtractedContact] = Field(default_factory=list)
 
 
+PageType = Literal["directory", "company_site", "article", "other"]
+
+
 class ExtractionResult(BaseModel):
     """Result of extracting leads from a page."""
 
     model_config = ConfigDict(extra="forbid")
 
+    page_type: PageType = Field(
+        default="other",
+        description="Type of page: directory (lists multiple companies), company_site (single company), article, other",
+    )
     leads: list[ExtractedLead] = Field(default_factory=list)
     is_relevant: bool = Field(default=False)
     evidence_snippet: str = Field(default="", max_length=500)
@@ -90,8 +98,21 @@ EXTRACTION_PROMPT = """You are a B2B lead extraction assistant. Extract organiza
 
 User's search intent: {prompt}
 
-IMPORTANT: Return leads as a list where each lead contains ONE organization with ITS associated contacts.
-Do NOT return separate lists of orgs and contacts - contacts must be nested under their organization.
+STEP 1: CLASSIFY THE PAGE TYPE
+- "directory": Lists multiple companies (e.g., supplier directory, partner page, "top 10" list, trade association members)
+- "company_site": Single company's own website (about us, contact us, team page)
+- "article": News, blog post, or informational content
+- "other": Doesn't fit above categories
+
+STEP 2: EXTRACT LEADS BASED ON PAGE TYPE
+- If page_type = "directory": Extract ALL companies listed (multiple leads OK)
+- If page_type = "company_site": Extract ONLY THE COMPANY THAT OWNS THIS SITE (max 1 lead)
+- If page_type = "article" or "other": Extract only if organizations are clearly featured
+
+CRITICAL RULE: A company's own contact/about page should NEVER yield multiple organizations.
+The contact page of "Domus Windows" should only return Domus Windows, not their partners/clients mentioned.
+
+Return leads as a list where each lead contains ONE organization with ITS associated contacts.
 
 Rules:
 1. Only extract information EXPLICITLY stated in the text
@@ -155,6 +176,9 @@ class Extractor:
         """
         Convert extraction result to Lead objects.
 
+        GUARDRAIL: If page_type is NOT 'directory', only keep first lead.
+        This prevents over-extraction from single-company pages.
+
         Fail-soft strategy:
         - Drop channels without value
         - Drop contacts with no channels AND no name
@@ -162,6 +186,16 @@ class Extractor:
         """
         if not extraction.is_relevant:
             return []
+
+        # GUARDRAIL: If not a directory page, only process first lead
+        # This prevents over-extraction from single-company pages
+        extracted_leads = extraction.leads
+        if extraction.page_type != "directory" and len(extracted_leads) > 1:
+            print(
+                f"  [Guardrail] {source_url}: page_type={extraction.page_type}, "
+                f"limiting from {len(extracted_leads)} to 1 lead"
+            )
+            extracted_leads = extracted_leads[:1]
 
         leads = []
 
@@ -171,7 +205,7 @@ class Extractor:
             snippet=extraction.evidence_snippet[:500] if extraction.evidence_snippet else None,
         )
 
-        for extracted_lead in extraction.leads:
+        for extracted_lead in extracted_leads:
             # Build contacts with evidence-backed channels
             contacts = []
             for ec in extracted_lead.contacts:

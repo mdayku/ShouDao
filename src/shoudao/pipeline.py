@@ -86,7 +86,7 @@ class Pipeline:
         # Step 3: Fetch pages
         print("[ShouDao] Step 3/6: Fetching pages...")
         fetcher = Fetcher(FetcherConfig(delay_between_requests=1.5))
-        fetch_results = fetcher.fetch_many(all_urls[:30])  # Cap at 30 for MVP
+        fetch_results = fetcher.fetch_many(all_urls[:60])  # Cap at 60 for better coverage
 
         successful = []
         for fr in fetch_results:

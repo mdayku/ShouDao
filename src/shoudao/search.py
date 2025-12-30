@@ -72,11 +72,82 @@ def get_search_provider(config: RunConfig) -> SearchProvider:
         raise ValueError(f"Unknown search provider: {config.search_provider}")
 
 
+# =============================================================================
+# COUNTRY → LANGUAGE MAPPING (for multilingual query expansion)
+# =============================================================================
+
+CARIBBEAN_COUNTRY_LANGUAGES: dict[str, list[str]] = {
+    # Spanish-first
+    "Puerto Rico": ["es", "en"],
+    "Dominican Republic": ["es"],
+    "Cuba": ["es"],
+    # French-first
+    "Haiti": ["fr"],
+    "Guadeloupe": ["fr"],
+    "Martinique": ["fr"],
+    "Saint Barthelemy": ["fr"],
+    "Saint Martin": ["fr"],
+    # Dutch-first
+    "Aruba": ["nl", "en"],
+    "Curacao": ["nl", "en"],
+    "Sint Maarten": ["nl", "en"],
+    # English-first (Commonwealth Caribbean)
+    "Jamaica": ["en"],
+    "Trinidad and Tobago": ["en"],
+    "Bahamas": ["en"],
+    "Barbados": ["en"],
+    "Cayman Islands": ["en"],
+    "Turks and Caicos": ["en"],
+    "St. Lucia": ["en"],
+    "Grenada": ["en"],
+    "Antigua and Barbuda": ["en"],
+    "St. Vincent": ["en"],
+    "Dominica": ["en"],
+    "British Virgin Islands": ["en"],
+    "US Virgin Islands": ["en"],
+}
+
+# Keyword packs per language (window/door industry)
+KEYWORD_PACKS: dict[str, dict[str, list[str]]] = {
+    "en": {
+        "products": ["windows", "doors", "windows and doors", "glazing", "aluminum windows"],
+        "types": ["supplier", "distributor", "installer", "manufacturer"],
+        "modifiers": ["hurricane", "impact", "uPVC", "aluminum"],
+    },
+    "es": {
+        "products": [
+            "ventanas",
+            "puertas",
+            "ventanas y puertas",
+            "vidriería",
+            "carpintería aluminio",
+        ],
+        "types": ["proveedor", "distribuidor", "instalador", "fabricante"],
+        "modifiers": ["huracán", "impacto", "PVC", "aluminio"],
+    },
+    "fr": {
+        "products": [
+            "fenêtres",
+            "portes",
+            "portes et fenêtres",
+            "vitrerie",
+            "menuiserie aluminium",
+        ],
+        "types": ["fournisseur", "distributeur", "installateur", "fabricant"],
+        "modifiers": ["ouragan", "cyclone", "PVC", "aluminium"],
+    },
+    "nl": {
+        "products": ["ramen", "deuren", "ramen en deuren", "glas", "kozijnen"],
+        "types": ["leverancier", "distributeur", "installateur", "fabrikant"],
+        "modifiers": ["orkaan", "aluminium", "PVC"],
+    },
+}
+
+
 def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
     """
     Expand a user prompt into multiple search queries.
-    For MVP, we do simple template expansion.
-    Later: use LLM for smarter expansion.
+    Includes multilingual expansion for Caribbean markets.
     """
     queries = []
 
@@ -90,9 +161,34 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
 
     # Add contact-focused variants
     queries.append(f"{prompt} contact email")
-    queries.append(f"{prompt} management team")
+    queries.append(f"{prompt} sales team")
 
     # Add directory-focused variants
     queries.append(f"{prompt} directory list")
+    queries.append(f"{prompt} suppliers list")
+
+    # Caribbean-specific expansions (if prompt mentions Caribbean)
+    prompt_lower = prompt.lower()
+    if "caribbean" in prompt_lower or "island" in prompt_lower:
+        # Detect product category from prompt
+        is_window_door = any(
+            term in prompt_lower for term in ["window", "door", "glazing", "aluminum", "glass"]
+        )
+
+        # Add island-specific queries with language variants
+        for country, languages in CARIBBEAN_COUNTRY_LANGUAGES.items():
+            for lang in languages[:1]:  # Primary language only for now
+                if lang == "en":
+                    # English query
+                    if is_window_door:
+                        queries.append(f"windows doors supplier installer {country}")
+                    else:
+                        queries.append(f"{prompt} {country}")
+                elif lang in KEYWORD_PACKS and is_window_door:
+                    # Non-English query using keyword packs
+                    pack = KEYWORD_PACKS[lang]
+                    product = pack["products"][0]  # Primary product term
+                    org_type = pack["types"][0]  # Primary type
+                    queries.append(f"{product} {org_type} {country}")
 
     return queries
