@@ -240,6 +240,53 @@ Benefits of migration:
 
 ---
 
+## Epic 13 — Data Source Expansion (P1) 🆕
+
+### Story 13.1 — LinkedIn Integration
+- [ ] Task 13.1.1: LinkedIn Sales Navigator API (requires subscription)
+- [ ] Task 13.1.2: LinkedIn public profile scraping via Proxycurl/PhantomBuster
+- [ ] Task 13.1.3: LinkedIn company page extraction
+- [ ] Task 13.1.4: Cross-reference LinkedIn contacts with extracted leads
+
+### Story 13.2 — Expanded Search Sources
+- [ ] Task 13.2.1: Bing Search API (diversify from Google/Serper)
+- [ ] Task 13.2.2: DuckDuckGo API (privacy-respecting, different index)
+- [ ] Task 13.2.3: Industry-specific directories (ThomasNet, Kompass, etc.)
+- [ ] Task 13.2.4: Trade association member lists
+- [ ] Task 13.2.5: Chamber of Commerce directories
+- [ ] Task 13.2.6: Government contractor registries
+
+### Story 13.3 — Media & News Sources
+- [ ] Task 13.3.1: Google News API for company mentions
+- [ ] Task 13.3.2: Press release aggregators (PR Newswire, BusinessWire)
+- [ ] Task 13.3.3: Trade publication scrapers
+- [ ] Task 13.3.4: Industry award/recognition lists
+- [ ] Task 13.3.5: Conference speaker/exhibitor lists
+
+### Story 13.4 — Business Data APIs
+- [ ] Task 13.4.1: Clearbit API for company enrichment
+- [ ] Task 13.4.2: Hunter.io for email discovery
+- [ ] Task 13.4.3: Apollo.io API integration
+- [ ] Task 13.4.4: Crunchbase for company data
+- [ ] Task 13.4.5: OpenCorporates for legal entity data
+
+### Story 13.5 — Social & Alternative Sources
+- [ ] Task 13.5.1: Twitter/X company account extraction
+- [ ] Task 13.5.2: Facebook business page scraping
+- [ ] Task 13.5.3: Instagram business profiles
+- [ ] Task 13.5.4: YouTube channel/video descriptions
+- [ ] Task 13.5.5: Podcast guest databases
+- [ ] Task 13.5.6: Glassdoor/Indeed for company info
+
+### Story 13.6 — Geographic & Import/Export Data
+- [ ] Task 13.6.1: Import/export databases (ImportGenius, Panjiva)
+- [ ] Task 13.6.2: Customs/shipping records APIs
+- [ ] Task 13.6.3: Port authority manifests
+- [ ] Task 13.6.4: Business license registries by country
+- [ ] Task 13.6.5: Real estate development permit databases
+
+---
+
 ## Technical Debt
 
 | Issue | Status | Notes |
