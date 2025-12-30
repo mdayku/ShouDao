@@ -255,6 +255,7 @@ class TalentPipeline:
         use_linkedin: bool = False,
         linkedin_mode: str = "Full",
         locations: list[str] | None = None,
+        enrich_github: bool = False,
     ):
         self.prompt = prompt
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_talent_" + uuid.uuid4().hex[:6]
@@ -262,6 +263,123 @@ class TalentPipeline:
         self.use_linkedin = use_linkedin
         self.linkedin_mode = linkedin_mode
         self.locations = locations
+        self.enrich_github = enrich_github
+
+    def _enrich_with_github(
+        self, candidates: list[Candidate], result: TalentRunResult
+    ) -> list[Candidate]:
+        """Enrich candidates with GitHub data."""
+        from .github import get_github_provider
+
+        provider = get_github_provider()
+        self.logger.phase("GitHub enrichment", f"Step 5/6 - {len(candidates)} candidates")
+
+        if provider.is_authenticated():
+            print("  [GitHub] Using authenticated API (5000 req/hr)")
+        else:
+            print("  [GitHub] Using unauthenticated API (60 req/hr)")
+            print("  [GitHub] Set GITHUB_TOKEN in .env for higher limits")
+
+        enriched_count = 0
+        for i, candidate in enumerate(candidates):
+            # Skip if we already have a GitHub URL
+            if candidate.github_url:
+                # Just fetch repos for existing URL
+                username = candidate.github_url.rstrip("/").split("/")[-1]
+                profile = provider.get_user(username)
+                if profile:
+                    profile = provider.enrich_profile(profile)
+                    self._apply_github_signals(candidate, profile)
+                    enriched_count += 1
+                continue
+
+            # Search for GitHub by name
+            name = candidate.name
+            if not name or name == "Unknown":
+                continue
+
+            print(f"    [{i + 1}/{len(candidates)}] Searching GitHub for: {name}")
+            username = provider.search_user(name)
+
+            if username:
+                profile = provider.get_user(username)
+                if profile:
+                    profile = provider.enrich_profile(profile)
+
+                    # Verify it's likely the same person (check for name match)
+                    if profile.name and self._names_match(name, profile.name):
+                        candidate.github_url = profile.html_url
+                        self._apply_github_signals(candidate, profile)
+                        enriched_count += 1
+                        print(f"      Found: {profile.html_url} ({len(profile.ai_repos)} AI repos)")
+                    else:
+                        print(f"      Found {username} but name mismatch, skipping")
+            else:
+                print("      Not found")
+
+        print(f"  [GitHub] Enriched {enriched_count}/{len(candidates)} candidates")
+        return candidates
+
+    def _apply_github_signals(self, candidate: Candidate, profile) -> None:
+        """Apply GitHub signals to a candidate."""
+        from .github import GitHubProfile
+
+        if not isinstance(profile, GitHubProfile):
+            return
+
+        # Update GitHub URL
+        if not candidate.github_url:
+            candidate.github_url = profile.html_url
+
+        # Update Twitter if found
+        if profile.twitter_username and not candidate.twitter_url:
+            candidate.twitter_url = f"https://twitter.com/{profile.twitter_username}"
+
+        # Update website if found
+        if profile.blog and not candidate.website_url:
+            candidate.website_url = profile.blog
+
+        # Update email if found and not already set
+        if profile.email and not candidate.email:
+            candidate.email = profile.email
+
+        # Add public repos
+        for repo in profile.ai_repos[:5]:  # Top 5 AI repos
+            if repo.html_url not in candidate.public_repos:
+                candidate.public_repos.append(repo.html_url)
+
+        # Calculate scores
+        from .github import get_github_provider
+
+        provider = get_github_provider()
+        candidate.ai_signal_score = max(
+            candidate.ai_signal_score,
+            provider.calculate_ai_signal_score(profile),
+        )
+        candidate.build_in_public_score = max(
+            candidate.build_in_public_score,
+            provider.calculate_build_in_public_score(profile),
+        )
+
+    def _names_match(self, name1: str, name2: str) -> bool:
+        """Check if two names are likely the same person."""
+        # Simple check: first name matches
+        parts1 = name1.lower().split()
+        parts2 = name2.lower().split()
+
+        if not parts1 or not parts2:
+            return False
+
+        # First name match
+        if parts1[0] == parts2[0]:
+            return True
+
+        # Last name match
+        if len(parts1) > 1 and len(parts2) > 1:
+            if parts1[-1] == parts2[-1]:
+                return True
+
+        return False
 
     def _run_linkedin_source(
         self, max_results: int | None, result: TalentRunResult
@@ -397,9 +515,13 @@ class TalentPipeline:
         result.total_candidates_extracted = len(all_candidates)
         print(f"  Total raw candidates: {len(all_candidates)}")
 
-        # Step 5: Dedupe, score, and classify
+        # Step 5: Enrich with GitHub data (if enabled)
+        if self.enrich_github and all_candidates:
+            all_candidates = self._enrich_with_github(all_candidates, result)
+
+        # Step 6: Dedupe, score, and classify
         self.logger.phase(
-            "Scoring and classification", f"Step 5/5 - {len(all_candidates)} candidates"
+            "Scoring and classification", f"Step 6/6 - {len(all_candidates)} candidates"
         )
         candidates = dedupe_candidates(all_candidates)
         candidates = score_all_candidates(candidates)
@@ -455,6 +577,7 @@ def run_talent_pipeline(
     use_linkedin: bool = False,
     linkedin_mode: str = "Full",
     locations: list[str] | None = None,
+    enrich_github: bool = False,
 ) -> TalentRunResult:
     """Convenience function to run a talent discovery pipeline."""
     pipeline = TalentPipeline(
@@ -462,5 +585,6 @@ def run_talent_pipeline(
         use_linkedin=use_linkedin,
         linkedin_mode=linkedin_mode,
         locations=locations,
+        enrich_github=enrich_github,
     )
     return pipeline.run(output_dir=output_dir, max_results=max_results, filters=filters)

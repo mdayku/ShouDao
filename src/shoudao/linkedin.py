@@ -303,15 +303,18 @@ class LinkedInProvider:
             school = None
             degree = None
             field_of_study = None
+            graduation_year = None
             if education and len(education) > 0:
                 edu = education[0]
                 school = edu.get("schoolName")
                 degree = edu.get("degree")
                 field_of_study = edu.get("fieldOfStudy")
+            # Extract graduation year for YOE validation
+            graduation_year = self._extract_graduation_year(education)
 
-            # Parse experience for years
+            # Parse experience for years (constrained by graduation year)
             experience = item.get("experience", [])
-            years_exp = self._calculate_years_experience(experience)
+            years_exp = self._calculate_years_experience(experience, graduation_year)
             exp_summary = self._summarize_experience(experience)
 
             # Get current title from experience
@@ -355,9 +358,12 @@ class LinkedInProvider:
                 degree = edu.get("degree") or edu.get("degreeName")
                 field_of_study = edu.get("fieldOfStudy") or edu.get("field")
 
-            # Calculate years of experience
+            # Extract graduation year for YOE validation
+            graduation_year = self._extract_graduation_year(education)
+
+            # Calculate years of experience (constrained by graduation year)
             experience = item.get("experience", []) or item.get("positions", [])
-            years_exp = self._calculate_years_experience(experience)
+            years_exp = self._calculate_years_experience(experience, graduation_year)
 
             # Experience summary (current + 1-2 previous)
             exp_summary = self._summarize_experience(experience)
@@ -387,30 +393,107 @@ class LinkedInProvider:
         except Exception:
             return None
 
-    def _calculate_years_experience(self, experience: list[dict]) -> int | None:
-        """Estimate years of professional experience from positions."""
+    def _extract_graduation_year(self, education: list[dict]) -> int | None:
+        """Extract the most recent graduation year from education."""
+        import re
+        from datetime import datetime
+
+        current_year = datetime.now().year
+        latest_grad_year: int | None = None
+
+        for edu in education:
+            # Try endDate field (dict format)
+            end_date = edu.get("endDate") or {}
+            if isinstance(end_date, dict):
+                year = end_date.get("year")
+                if year and isinstance(year, int) and 1970 < year <= current_year:
+                    if latest_grad_year is None or year > latest_grad_year:
+                        latest_grad_year = year
+
+            # Try period field (string format like "2015 - 2019")
+            period = edu.get("period") or ""
+            if isinstance(period, str):
+                # Look for the end year (second year in a range)
+                matches = re.findall(r"\b(19|20)\d{2}\b", period)
+                if matches:
+                    year = int(matches[-1])  # Take the last year (end date)
+                    if 1970 < year <= current_year:
+                        if latest_grad_year is None or year > latest_grad_year:
+                            latest_grad_year = year
+
+        return latest_grad_year
+
+    def _calculate_years_experience(
+        self, experience: list[dict], graduation_year: int | None = None
+    ) -> int | None:
+        """Estimate years of professional experience from positions.
+
+        Strategy:
+        1. Find the earliest start year across all positions
+        2. Calculate years from then to now
+        3. Cap by graduation year if available (can't work before graduating)
+        4. Cap at 25 years max (Gauntlet target demo)
+        """
+        import re
+        from datetime import datetime
+
         if not experience:
             return None
 
-        # Simple heuristic: count positions, assume avg 2 years each
-        # More sophisticated: parse dates if available
-        total_years = 0
-        for pos in experience:
-            # Try to get duration
-            duration = pos.get("duration") or pos.get("durationInMonths")
-            if isinstance(duration, int):
-                total_years += duration / 12
-            elif isinstance(duration, str) and "yr" in duration.lower():
-                # Parse "2 yrs 3 mos" format
-                try:
-                    years = int(duration.split()[0])
-                    total_years += years
-                except (ValueError, IndexError):
-                    total_years += 2  # Default estimate
-            else:
-                total_years += 2  # Default estimate per position
+        earliest_year: int | None = None
+        current_year = datetime.now().year
 
-        return int(total_years) if total_years > 0 else None
+        for pos in experience:
+            # Try to extract start year from various fields
+            start_date = pos.get("startDate") or {}
+
+            # Handle dict format: {"year": 2020, "month": 1}
+            if isinstance(start_date, dict):
+                year = start_date.get("year")
+                if year and isinstance(year, int) and 1950 < year <= current_year:
+                    if earliest_year is None or year < earliest_year:
+                        earliest_year = year
+
+            # Handle string format: "Jan 2020" or "2020"
+            elif isinstance(start_date, str):
+                match = re.search(r"\b(19|20)\d{2}\b", start_date)
+                if match:
+                    year = int(match.group())
+                    if 1950 < year <= current_year:
+                        if earliest_year is None or year < earliest_year:
+                            earliest_year = year
+
+        if earliest_year:
+            years = current_year - earliest_year
+
+            # If we have graduation year, YOE can't exceed years since graduation
+            if graduation_year:
+                max_possible_yoe = current_year - graduation_year
+                years = min(years, max_possible_yoe)
+
+            # Cap at 25 years (Gauntlet target: young-ish professionals)
+            return min(years, 25)
+
+        # Fallback: parse duration strings but DON'T sum (concurrent roles)
+        # Instead, find the longest single duration
+        max_years = 0
+        for pos in experience:
+            duration = pos.get("duration")
+            if isinstance(duration, str):
+                years_match = re.search(r"(\d+)\s*yr", duration.lower())
+                if years_match:
+                    pos_years = int(years_match.group(1))
+                    max_years = max(max_years, pos_years)
+
+        if max_years > 0:
+            # Cap by graduation year if available
+            if graduation_year:
+                max_possible = current_year - graduation_year
+                max_years = min(max_years, max_possible)
+            return min(max_years, 25)
+
+        # No data available
+        return None
 
     def _summarize_experience(self, experience: list[dict]) -> str | None:
         """Create brief experience summary."""

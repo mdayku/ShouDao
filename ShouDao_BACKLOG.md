@@ -467,14 +467,41 @@ Priority order:
 ### Story 13.1 — LinkedIn Integration ✅ DONE
 See Story 15.3 — Implemented via Apify actors.
 
-### Story 13.2 — GitHub API (Next Priority)
-- [ ] Task 13.2.1: GitHub API client with token auth
-- [ ] Task 13.2.2: Extract repos, stars, languages, commit frequency
-- [ ] Task 13.2.3: Rate limit handling (5000 req/hr with token)
+### Story 13.2 — GitHub API ✅ DONE
+- [x] Task 13.2.1: GitHub API client with token auth
+- [x] Task 13.2.2: Extract repos, stars, languages, AI repo detection
+- [x] Task 13.2.3: Rate limit handling (5000 req/hr with token)
+- [x] Task 13.2.4: AI signal scoring based on repo analysis
+- [x] Task 13.2.5: Build-in-public scoring
 
 ### Story 13.3 — Alternative Search Sources (Low Priority)
 - [ ] Task 13.3.1: Bing Search API
 - [ ] Task 13.3.2: DuckDuckGo API
+
+### Story 13.5 — X/Twitter Signal-First Flow (v0.8+ Future)
+> **Concept:** Prioritize candidates by their X/Twitter activity first, as it's a stronger builder-in-public signal. Then enrich with LinkedIn/GitHub.
+
+**Proposed Flow:**
+```
+X/Twitter search (AI builders, LLM enthusiasts)
+    ↓
+LinkedIn enrichment (professional context, education)
+    ↓
+GitHub enrichment (technical validation, AI repos)
+    ↓
+Backfill with LinkedIn search (fill quota)
+```
+
+**Why X-First?**
+- Builder-in-public signal is strongest on X
+- AI/ML community is very active on X
+- Can find people *before* they update their LinkedIn
+
+**Tasks (not started):**
+- [ ] Task 13.5.1: Evaluate X API v2 costs and rate limits
+- [ ] Task 13.5.2: Search by keywords (LLM, AI agents, Cursor, etc.)
+- [ ] Task 13.5.3: Extract profile → find LinkedIn → enrich
+- [ ] Task 13.5.4: Integrate into talent pipeline as primary source option
 
 ### Story 13.4 — Business Data APIs (Evaluate as needed)
 Potential integrations if budget allows:

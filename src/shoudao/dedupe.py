@@ -450,8 +450,9 @@ def dedupe_all_contacts(leads: list[Lead]) -> list[Lead]:
 # CANDIDATE SCORING (Gauntlet Talent Discovery)
 # =============================================================================
 
-# Known "good" universities for CS (high CCAT correlation)
+# Known "elite" universities for CS/STEM (highest CCAT correlation)
 TOP_CS_UNIVERSITIES = {
+    # US Elite
     "stanford",
     "mit",
     "cmu",
@@ -480,6 +481,7 @@ TOP_CS_UNIVERSITIES = {
     "purdue",
     "texas",
     "ut austin",
+    # International Elite
     "waterloo",
     "toronto",
     "oxford",
@@ -487,6 +489,125 @@ TOP_CS_UNIVERSITIES = {
     "imperial",
     "eth",
     "epfl",
+    "tsinghua",
+    "peking",
+    "nus",
+    "nanyang",
+    "iit",
+    "technion",
+}
+
+# Good universities - still strong signal, slightly lower bonus
+MID_TIER_CS_UNIVERSITIES = {
+    # US Strong Programs
+    "wisconsin",
+    "uw madison",
+    "maryland",
+    "umd",
+    "virginia",
+    "uva",
+    "ohio state",
+    "penn state",
+    "minnesota",
+    "colorado",
+    "cu boulder",
+    "rutgers",
+    "rice",
+    "vanderbilt",
+    "notre dame",
+    "boston university",
+    "bu",
+    "northeastern",
+    "rochester",
+    "rpi",
+    "wpi",
+    "santa clara",
+    "uc san diego",
+    "ucsd",
+    "uc irvine",
+    "uci",
+    "uc davis",
+    "uc santa barbara",
+    "arizona state",
+    "asu",
+    "arizona",
+    "utah",
+    "oregon",
+    "nc state",
+    "virginia tech",
+    "unc",
+    "north carolina",
+    "florida",
+    "uf",
+    "miami",
+    "emory",
+    "tulane",
+    "case western",
+    "stony brook",
+    "buffalo",
+    # CSU/State Schools with good CS
+    "san jose state",
+    "sjsu",
+    "cal poly",
+    "san diego state",
+    "sdsu",
+    "texas a&m",
+    "tamu",
+    "texas tech",
+    "ut dallas",
+    "utd",
+    "ut arlington",
+    "iowa state",
+    "kansas",
+    "missouri",
+    "indiana",
+    "clemson",
+    "auburn",
+    # International Good
+    "mcgill",
+    "ubc",
+    "british columbia",
+    "alberta",
+    "montreal",
+    "edinburgh",
+    "manchester",
+    "ucl",
+    "kings college",
+    "warwick",
+    "bristol",
+    "tu munich",
+    "rwth aachen",
+    "tu berlin",
+    "kit",
+    "heidelberg",
+    "delft",
+    "eindhoven",
+    "amsterdam",
+    "leiden",
+    "zurich",
+    "tokyo",
+    "kyoto",
+    "osaka",
+    "seoul national",
+    "kaist",
+    "postech",
+    "melbourne",
+    "sydney",
+    "unsw",
+    "anu",
+    "queensland",
+    "tel aviv",
+    "hebrew university",
+    "weizmann",
+    # Bootcamps/Accelerators (strong signal for self-starters)
+    "hack reactor",
+    "app academy",
+    "fullstack",
+    "flatiron",
+    "lambda school",
+    "codesmith",
+    "recurse center",
+    "bradfield",
 }
 
 # Companies known for high compensation (>$150k likely)
@@ -536,8 +657,26 @@ HIGH_COMP_ROLES = {
     "head of",
     "lead",
     "manager",
+}
+
+# Startup indicators (likely lower salary than big tech)
+STARTUP_INDICATORS = {
+    "stealth",
+    "startup",
+    "early stage",
+    "seed",
+    "series a",
+    "pre-seed",
+    "founder",
+    "co-founder",
+    "founding",
     "senior manager",
 }
+
+
+# Cap years of experience for scoring purposes
+# Beyond 10 years, no additional credit (diminishing returns for Gauntlet fit)
+MAX_YOE_FOR_SCORING = 10
 
 
 def estimate_salary_band(candidate: Candidate) -> SalaryBand:
@@ -547,18 +686,26 @@ def estimate_salary_band(candidate: Candidate) -> SalaryBand:
     Logic:
     - FAANG/top-tier companies at any level → likely >$150k
     - Senior/staff roles anywhere → likely >$150k
+    - Startups get a discount (equity vs cash tradeoff)
     - Junior/mid roles at startups/smaller cos → likely <$150k
+    - Cap years at 10 for estimation (beyond that, same treatment)
     - Unknown → unknown
     """
     company = (candidate.current_company or "").lower()
     role = (candidate.current_role or "").lower()
-    years = candidate.years_experience or 0
+    # Cap years for salary estimation
+    years = min(candidate.years_experience or 0, MAX_YOE_FOR_SCORING)
 
     # Check for high-comp company
     is_high_comp_company = any(c in company for c in HIGH_COMP_COMPANIES)
 
     # Check for high-comp role
     is_high_comp_role = any(r in role for r in HIGH_COMP_ROLES)
+
+    # Check for startup (likely lower cash comp, more equity)
+    is_startup = any(s in company for s in STARTUP_INDICATORS) or any(
+        s in role for s in STARTUP_INDICATORS
+    )
 
     # If at a top company, likely high comp
     if is_high_comp_company:
@@ -567,11 +714,20 @@ def estimate_salary_band(candidate: Candidate) -> SalaryBand:
         else:
             return "150k_200k"
 
-    # If senior role anywhere
+    # Startups typically pay less cash (equity tradeoff)
+    if is_startup:
+        if years >= 10:
+            return "150k_200k"  # Senior startup folks still make decent money
+        elif years >= 5:
+            return "100k_150k"
+        else:
+            return "under_100k"
+
+    # If senior role at non-startup
     if is_high_comp_role:
         return "150k_200k"
 
-    # Years of experience heuristic
+    # Years of experience heuristic (capped at 10)
     if years >= 7:
         return "150k_200k"
     elif years >= 4:
@@ -589,7 +745,7 @@ def estimate_age(candidate: Candidate) -> int | None:
 
     Logic:
     - If graduation_year known: age = current_year - graduation_year + 22
-    - If years_experience known: age = 22 + years_experience
+    - If years_experience known: age = 22 + min(years, 25) (cap at 25 for estimation)
     - Otherwise: None
 
     Returns:
@@ -603,10 +759,11 @@ def estimate_age(candidate: Candidate) -> int | None:
         estimated_birth_year = candidate.graduation_year - 22
         return current_year - estimated_birth_year
 
-    # Fall back to years of experience
+    # Fall back to years of experience (cap at 25 to avoid absurd ages)
     if candidate.years_experience:
-        # Assume started working at 22
-        return 22 + candidate.years_experience
+        # Assume started working at 22, cap experience at 25 years
+        capped_years = min(candidate.years_experience, 25)
+        return 22 + capped_years
 
     return None
 
@@ -657,25 +814,75 @@ def score_candidate(candidate: Candidate) -> tuple[float, dict[str, float]]:
     score = 0.0
     contributions: dict[str, float] = {}
 
-    # CS degree signal
+    # Education signals
     degree = (candidate.degree_signal or "").lower()
     university = (candidate.university or "").lower()
 
-    has_cs = "cs" in degree or "computer" in degree or "software" in degree
+    # Detect degree level (PhD > Masters > Bachelors)
+    has_phd = any(kw in degree for kw in ["phd", "ph.d", "doctorate", "doctor of"])
+    has_masters = any(kw in degree for kw in ["master", "ms ", "m.s.", "msc", "mba", "meng"])
+
+    # Detect CS/technical field
+    has_cs = any(
+        kw in degree
+        for kw in ["cs", "computer", "software", "electrical", "math", "physics", "engineering"]
+    )
+
+    # School tier
     is_top_school = any(u in university for u in TOP_CS_UNIVERSITIES)
+    is_mid_school = any(u in university for u in MID_TIER_CS_UNIVERSITIES)
 
-    if has_cs and is_top_school:
-        score += 0.20
-        contributions["cs_top_school"] = 0.20
+    # Scoring: School tier + Degree level + Field
+    # Top school + PhD + CS = highest (0.30)
+    # Top school + Masters + CS = 0.25
+    # Top school + Bachelors + CS = 0.20
+    # Mid school follows similar pattern but -0.05
+    if is_top_school:
+        if has_phd and has_cs:
+            score += 0.30
+            contributions["phd_cs_top_school"] = 0.30
+        elif has_masters and has_cs:
+            score += 0.25
+            contributions["masters_cs_top_school"] = 0.25
+        elif has_cs:
+            score += 0.20
+            contributions["cs_top_school"] = 0.20
+        elif has_phd or has_masters:
+            score += 0.15
+            contributions["grad_top_school"] = 0.15
+        else:
+            score += 0.10
+            contributions["top_school"] = 0.10
+    elif is_mid_school:
+        if has_phd and has_cs:
+            score += 0.25
+            contributions["phd_cs_mid_school"] = 0.25
+        elif has_masters and has_cs:
+            score += 0.20
+            contributions["masters_cs_mid_school"] = 0.20
+        elif has_cs:
+            score += 0.15
+            contributions["cs_mid_school"] = 0.15
+        elif has_phd or has_masters:
+            score += 0.12
+            contributions["grad_mid_school"] = 0.12
+        else:
+            score += 0.08
+            contributions["mid_school"] = 0.08
     elif has_cs:
-        score += 0.10
-        contributions["cs_degree"] = 0.10
-    elif is_top_school:
-        score += 0.10
-        contributions["top_school"] = 0.10
+        # CS degree from unknown school
+        if has_phd:
+            score += 0.20
+            contributions["phd_cs"] = 0.20
+        elif has_masters:
+            score += 0.15
+            contributions["masters_cs"] = 0.15
+        else:
+            score += 0.10
+            contributions["cs_degree"] = 0.10
 
-    # Engineering experience
-    years = candidate.years_experience or 0
+    # Engineering experience (cap at 10 years for scoring)
+    years = min(candidate.years_experience or 0, MAX_YOE_FOR_SCORING)
     if years >= 2:
         score += 0.20
         contributions["engineering_experience"] = 0.20
@@ -746,18 +953,29 @@ def classify_candidate_tier(candidate: Candidate) -> CandidateTier:
     """
     Classify a candidate into fit tiers.
 
-    Tier A: CS/eng background + public AI project + likely <$150k
-    Tier B: Good repos, fewer demos, strong learning trajectory
-    Tier C: Early but promising, might pass with mentorship
+    Tier A: High score + either low salary OR strong AI signal (willing to pivot)
+    Tier B: Good score, good potential
+    Tier C: Early but promising, needs verification
     """
     score = candidate.confidence
     salary = candidate.estimated_salary_band
+    ai_signal = candidate.ai_signal_score
 
-    # Tier A: High score AND not already making big money
-    if score >= 0.6 and salary in ("under_100k", "100k_150k", "unknown"):
-        return "A"
+    # Tier A paths:
+    # 1. High score + not already making big money
+    # 2. High score + very strong AI signal (they're building, likely to pivot)
+    # 3. Very high score (0.8+) regardless of salary
+    if score >= 0.6:
+        if salary in ("under_100k", "100k_150k", "unknown"):
+            return "A"
+        # Strong AI builders are likely to take a pay cut to join Gauntlet
+        if ai_signal >= 0.6:
+            return "A"
+        # Very high overall score overrides salary concerns
+        if score >= 0.8:
+            return "A"
 
-    # Tier B: Decent score OR high score but high salary
+    # Tier B: Decent score
     if score >= 0.4:
         return "B"
 
