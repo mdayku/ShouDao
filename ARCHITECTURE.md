@@ -173,20 +173,91 @@ This makes the output:
 ```
 src/shoudao/
 ├── cli.py           # Command-line interface
-├── pipeline.py      # Orchestrates the full run
+├── pipeline.py      # Orchestrates the full run (leads + talent)
 ├── world_context.py # MCP-style world knowledge provider
 ├── search.py        # Query expansion + Serper API
 ├── fetcher.py       # Polite HTTP fetching
 ├── extractor.py     # LLM extraction + page classification
-├── dedupe.py        # Deduplication + scoring
+├── dedupe.py        # Deduplication + scoring (leads + candidates)
 ├── advisor.py       # Outreach advice generation
-├── exporter.py      # CSV/JSON export with fallbacks
-├── models.py        # Pydantic schemas (Lead, Organization, etc.)
+├── exporter.py      # CSV/JSON/Excel export with fallbacks
+├── models.py        # Pydantic schemas (Lead, Organization, Candidate, etc.)
+├── linkedin.py      # LinkedIn integration via Apify
+├── recipe.py        # Query recipe management (YAML)
 └── sources.py       # Audit trail generation
 
 data/
 └── world_context.yaml  # Authoritative country/language facts
 ```
+
+---
+
+## Talent Discovery Pipeline
+
+In addition to B2B lead generation, ShouDao supports **talent discovery** for finding candidates:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           USER INTENT                                    │
+│  "Find software engineers with AI experience for Gauntlet Cohort 4"     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+        ┌───────────────────┐           ┌───────────────────┐
+        │   WEB SEARCH      │           │   LINKEDIN        │
+        │   (Serper API)    │           │   (Apify API)     │
+        └───────────────────┘           └───────────────────┘
+                    │                               │
+                    ▼                               ▼
+        ┌───────────────────┐           ┌───────────────────┐
+        │   FETCH + EXTRACT │           │   PROFILE SEARCH  │
+        │   (LLM parsing)   │           │   (HarvestAPI)    │
+        └───────────────────┘           └───────────────────┘
+                    │                               │
+                    └───────────────┬───────────────┘
+                                    ▼
+        ┌─────────────────────────────────────────────────────┐
+        │                 CANDIDATE MODEL                      │
+        │   linkedin_profile_to_candidate() converter          │
+        │   Same Pydantic schema regardless of source          │
+        └─────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+        ┌─────────────────────────────────────────────────────┐
+        │              DEDUPE + SCORING + TIER                 │
+        │   score_candidate() → A/B/C classification           │
+        │   estimate_salary_band() → salary estimation         │
+        └─────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+        ┌─────────────────────────────────────────────────────┐
+        │                 UNIFIED EXPORTS                      │
+        │   candidates.csv | candidates.xlsx | candidates.json │
+        │   report.md                                          │
+        └─────────────────────────────────────────────────────┘
+```
+
+### LinkedIn Integration
+
+LinkedIn data is sourced via **Apify actors**:
+
+| Actor | Purpose | Cost |
+|-------|---------|------|
+| `harvestapi/linkedin-profile-search` | Search profiles by keywords/filters | $0.10/page + $0.004/profile |
+| `harvestapi/linkedin-profile-scraper` | Scrape individual profiles | $0.004/profile |
+
+**Configuration:**
+```bash
+APIFY_API_KEY=apify_api_...
+APIFY_LINKEDIN_SEARCH_ACTOR=harvestapi/linkedin-profile-search  # optional
+APIFY_LINKEDIN_PROFILE_ACTOR=harvestapi/linkedin-profile-scraper  # optional
+```
+
+**Key design decision:** LinkedIn profiles are converted to the same `Candidate` model as web-sourced candidates via `linkedin_profile_to_candidate()`. This ensures:
+- Unified scoring and tier classification
+- Same export infrastructure
+- Consistent data model for downstream consumers
 
 ---
 

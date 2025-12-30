@@ -433,3 +433,94 @@ def get_linkedin_provider() -> LinkedInProvider | None:
     except Exception as e:
         print(f"[LinkedIn] Could not initialize: {e}")
         return None
+
+
+def linkedin_profile_to_candidate(profile: LinkedInProfile):
+    """Convert a LinkedInProfile to a Candidate model.
+
+    This enables LinkedIn sourced candidates to flow through the same
+    pipeline as web-sourced candidates, including:
+    - Scoring and tier classification
+    - Deduplication
+    - Export to JSON/CSV/Excel/Markdown
+
+    Args:
+        profile: LinkedInProfile from Apify scraping
+
+    Returns:
+        Candidate model ready for pipeline processing
+    """
+    from datetime import UTC, datetime
+
+    from .models import AgeBand, Candidate, CandidateTier, Evidence, SalaryBand
+
+    # Build degree signal from education
+    degree_signal = None
+    if profile.school:
+        degree_parts = []
+        if profile.degree:
+            degree_parts.append(profile.degree)
+        if profile.field_of_study:
+            degree_parts.append(profile.field_of_study)
+        degree_parts.append(profile.school)
+        degree_signal = ", ".join(degree_parts)
+
+    # Estimate salary band from experience and title
+    salary_band = SalaryBand.UNKNOWN
+    if profile.years_experience:
+        if profile.years_experience >= 10:
+            salary_band = SalaryBand.SENIOR
+        elif profile.years_experience >= 5:
+            salary_band = SalaryBand.MID
+        elif profile.years_experience >= 2:
+            salary_band = SalaryBand.JUNIOR
+        else:
+            salary_band = SalaryBand.ENTRY
+
+    # Estimate age band from experience
+    age_band = AgeBand.UNKNOWN
+    if profile.years_experience:
+        # Rough estimate: experience + 22 (college graduation age)
+        estimated_age = profile.years_experience + 22
+        if estimated_age < 25:
+            age_band = AgeBand.YOUNG_PROFESSIONAL
+        elif estimated_age < 35:
+            age_band = AgeBand.EARLY_CAREER
+        elif estimated_age < 45:
+            age_band = AgeBand.MID_CAREER
+        else:
+            age_band = AgeBand.SENIOR
+
+    # Create evidence from LinkedIn profile
+    evidence = [
+        Evidence(
+            url=profile.url,
+            snippet=profile.headline or f"{profile.name} - LinkedIn",
+            retrieved_at=datetime.now(UTC),
+        )
+    ]
+
+    return Candidate(
+        name=profile.name or "Unknown",
+        primary_profile=profile.url,
+        linkedin_url=profile.url,
+        github_url=None,  # Would need separate enrichment
+        twitter_url=profile.twitter,
+        email=profile.email,
+        degree_signal=degree_signal,
+        engineering_experience=profile.experience_summary,
+        current_role=profile.current_title or profile.headline,
+        current_company=profile.current_company,
+        location=profile.location,
+        estimated_salary_band=salary_band,
+        estimated_age_band=age_band,
+        public_work=[],  # LinkedIn doesn't expose this
+        ai_signal_score=0.0,  # Not assessed from LinkedIn
+        build_in_public_score=0.0,  # Not assessed from LinkedIn
+        overall_fit_tier=CandidateTier.C,  # Default, will be updated by scoring
+        why_flagged="Found via LinkedIn search",
+        evidence=evidence,
+        confidence=0.5,  # Default for LinkedIn sources
+        score=None,  # Will be set by scoring
+        score_contributions=None,
+    )

@@ -6,7 +6,7 @@
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
 | Author | Marcus |
-| Version | 0.5 |
+| Version | 0.6 |
 | Last Updated | December 30, 2025 |
 | Status | Active Development |
 
@@ -340,16 +340,27 @@ and must fail closed (drop fields) if evidence is missing.
 - Shareable configurations — recipes can be versioned/shared
 - Faster iteration — no need to retype long CLI commands
 
-### Upcoming — v0.6.0 Gauntlet Talent Discovery (Planned)
-**Goal:** Adapt ShouDao for talent/candidate discovery, specifically for Gauntlet AI Cohort 4 applicant sourcing.
+### 2025-12-30 — v0.6.0 Gauntlet Talent Discovery + LinkedIn
+**Goal:** Talent/candidate discovery for Gauntlet AI Cohort 4 with LinkedIn integration.
 
-**Key changes:**
-- New `Candidate` model (name, profile, education, experience, projects, salary band)
-- GitHub API integration for repo/commit/star signals
-- LinkedIn integration for education, experience, and salary estimation
-- Talent-specific query expansion (site:github.com, HuggingFace, Streamlit, blogs)
-- `shoudao talent` command (already implemented)
-- Skip advice generation (Gauntlet staff handles outreach)
+**Built:**
+- **Candidate Model** — name, profile, education, experience, projects, salary band, tier
+- **LinkedIn Integration** — Via Apify actors (`harvestapi/linkedin-profile-search`)
+- **Unified Pipeline** — `shoudao talent --linkedin` uses same pipeline as web search
+- **Same Exports** — JSON, CSV, Excel, Markdown for all sources
+- **Profile Converter** — `linkedin_profile_to_candidate()` for consistent data model
+
+**Commands:**
+```bash
+# Web-sourced candidates
+shoudao talent --prompt "software engineers AI"
+
+# LinkedIn-sourced candidates
+shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
+
+# LinkedIn with mode selection
+shoudao talent --linkedin --linkedin-mode Full --prompt "ML engineers"
+```
 
 **Qualification signals:**
 - CS degree from good school
@@ -362,3 +373,12 @@ and must fail closed (drop fields) if evidence is missing.
 - No email guessing
 - Only publicly listed contact info
 - Gauntlet staff handles all outreach
+
+### Upcoming — v0.7.0 GitHub API Integration (Planned)
+**Goal:** Integrate GitHub API for better repo/commit/star signals.
+
+**Key changes:**
+- GitHub API client with token auth
+- Extract repos, stars, languages, commit frequency
+- Identify AI/LLM repos (keywords: agent, llm, openai, langchain)
+- Rate limit handling (5000 req/hr with token)

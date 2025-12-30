@@ -63,13 +63,18 @@ Core talent discovery works without LinkedIn:
 | **Task 12.1.3**: Model cost tracking | Know how much each run costs | 2h |
 | **Task 5.3.1**: Contact page discovery | Find GitHub/LinkedIn links on personal sites | 2h |
 
-### LinkedIn Status
-LinkedIn integration is **blocked**:
-- ❌ Proxycurl shut down
-- ⚠️ PhantomBuster is manual-only (browser automation, no API)
-- ⚠️ Official LinkedIn API requires partner approval
+### LinkedIn Status ✅ WORKING
+LinkedIn integration is now **available** via Apify:
+- ✅ Apify `harvestapi/linkedin-profile-search` actor
+- ✅ `shoudao talent --linkedin` command
+- ✅ Same export infrastructure (JSON/CSV/Excel/MD)
 
-**Workaround:** For now, manually export from PhantomBuster if needed, or skip LinkedIn enrichment.
+**Usage:**
+```bash
+shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
+```
+
+**Costs:** ~$0.10/search page + $0.004/profile (Full mode)
 
 ### Can Skip
 
@@ -370,19 +375,23 @@ A candidate is interesting if they show ≥3 of these:
 - [ ] Task 15.2.4: Extract README quality signals
 - [ ] Task 15.2.5: Rate limit handling (5000 req/hr with token)
 
-### Story 15.3 — LinkedIn Integration ❌ BLOCKED
+### Story 15.3 — LinkedIn Integration ✅ DONE
 
-**Status:** LinkedIn integration is blocked due to lack of viable APIs.
+**Status:** LinkedIn integration working via Apify.
 
-- ❌ Proxycurl — **Shut down** (no longer available)
-- ⚠️ PhantomBuster — Manual-only (browser automation, exports CSV, not callable API)
-- ⚠️ Official LinkedIn API — Requires partner approval, not available to indie devs
-- ⚠️ RapidAPI options — Mostly scrapers with ToS concerns
+- ✅ Apify `harvestapi/linkedin-profile-search` — Full profile search with filters
+- ✅ Apify `harvestapi/linkedin-profile-scraper` — Individual profile enrichment
+- ✅ Integrated into talent pipeline via `--linkedin` flag
+- ✅ Same Candidate model and export infrastructure
 
-**Workaround:** Manual enrichment via PhantomBuster exports if needed.
+**Implementation:**
+- [x] Task 15.3.1: Evaluate LinkedIn data providers — Apify selected
+- [x] Task 15.3.2: Create `LinkedInProvider` class with search/scrape methods
+- [x] Task 15.3.3: Define `LinkedInProfile` model for raw data
+- [x] Task 15.3.4: Create `linkedin_profile_to_candidate()` converter
+- [x] Task 15.3.5: Integrate into `TalentPipeline` with `--linkedin` flag
 
-- [x] Task 15.3.1: Evaluate LinkedIn data providers — **No viable options found**
-- [ ] Task 15.3.2-5: **Blocked** pending API availability
+**Costs:** ~$0.10/search page + $0.004/profile (Full mode), $5 free credits on signup
 
 ### Story 15.4 — Talent Query Expansion ✅ DONE
 
@@ -455,8 +464,8 @@ Priority order:
 
 > **Note:** This epic is a wishlist of potential integrations. Most are speculative and depend on API availability, cost, and ToS compliance. Prioritize based on actual need.
 
-### Story 13.1 — LinkedIn Integration ❌ BLOCKED
-See Story 15.3 — No viable API options available.
+### Story 13.1 — LinkedIn Integration ✅ DONE
+See Story 15.3 — Implemented via Apify actors.
 
 ### Story 13.2 — GitHub API (Next Priority)
 - [ ] Task 13.2.1: GitHub API client with token auth
@@ -510,6 +519,28 @@ Potential integrations if budget allows:
 ---
 
 ## Session Log
+
+### 2025-12-30 Session 4
+**Focus:** LinkedIn integration via Apify
+
+**Built:**
+- **LinkedIn Provider** — `LinkedInProvider` class with search/scrape methods
+- **LinkedIn Profile Model** — `LinkedInProfile` Pydantic model
+- **Profile-to-Candidate Converter** — `linkedin_profile_to_candidate()` function
+- **Unified Pipeline** — `shoudao talent --linkedin` uses same pipeline as web search
+- **Same Exports** — JSON, CSV, Excel, Markdown for all sources
+
+**Commands:**
+- `shoudao linkedin --search "query"` — Test/debug LinkedIn search
+- `shoudao talent --linkedin --prompt "..."` — Full pipeline with LinkedIn source
+- `shoudao talent --linkedin --linkedin-mode Full` — Detailed profile scraping
+
+**Environment Variables:**
+- `APIFY_API_KEY` — Required for LinkedIn
+- `APIFY_LINKEDIN_SEARCH_ACTOR` — Optional, defaults to `harvestapi/linkedin-profile-search`
+- `APIFY_LINKEDIN_PROFILE_ACTOR` — Optional, defaults to `harvestapi/linkedin-profile-scraper`
+
+---
 
 ### 2025-12-30 Session 3
 **Focus:** Recipe system implementation

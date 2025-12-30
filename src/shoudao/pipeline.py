@@ -248,31 +248,57 @@ def run_pipeline(
 class TalentPipeline:
     """Talent discovery pipeline for finding Gauntlet candidates."""
 
-    def __init__(self, prompt: str, verbose: bool = False):
+    def __init__(
+        self,
+        prompt: str,
+        verbose: bool = False,
+        use_linkedin: bool = False,
+        linkedin_mode: str = "Full",
+    ):
         self.prompt = prompt
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_talent_" + uuid.uuid4().hex[:6]
         self.logger = ProgressLogger(self.run_id, verbose=verbose)
+        self.use_linkedin = use_linkedin
+        self.linkedin_mode = linkedin_mode
 
-    def run(
-        self,
-        output_dir: Path | None = None,
-        max_results: int | None = None,
-        filters: dict | None = None,
-    ) -> TalentRunResult:
-        """Execute the talent discovery pipeline."""
-        result = TalentRunResult(
-            run_id=self.run_id,
-            prompt=self.prompt,
-            started_at=datetime.now(UTC),
+    def _run_linkedin_source(
+        self, max_results: int | None, result: TalentRunResult
+    ) -> list[Candidate]:
+        """Source candidates from LinkedIn via Apify."""
+        from .linkedin import get_linkedin_provider, linkedin_profile_to_candidate
+
+        provider = get_linkedin_provider()
+        if not provider:
+            result.errors.append("LinkedIn not configured (APIFY_API_KEY not set)")
+            print("  ERROR: LinkedIn not configured")
+            return []
+
+        self.logger.phase("Searching LinkedIn", "Step 2/5")
+        profiles = provider.search_profiles(
+            self.prompt,
+            max_results=max_results or 25,
+            scraper_mode=self.linkedin_mode,
         )
 
-        self.logger.phase("Starting talent discovery", f"ID={self.run_id}")
-        print(
-            f"  Prompt: {self.prompt[:100]}..."
-            if len(self.prompt) > 100
-            else f"  Prompt: {self.prompt}"
-        )
+        print(f"  Found {len(profiles)} LinkedIn profiles")
+        result.sources_fetched = len(profiles)
 
+        # Convert profiles to candidates
+        self.logger.phase("Converting profiles to candidates", "Step 3/5")
+        candidates = []
+        for profile in profiles:
+            try:
+                candidate = linkedin_profile_to_candidate(profile)
+                candidates.append(candidate)
+            except Exception as e:
+                result.errors.append(f"Profile conversion error: {e}")
+
+        return candidates
+
+    def _run_web_source(
+        self, max_results: int | None, filters: dict | None, result: TalentRunResult
+    ) -> list[Candidate]:
+        """Source candidates from web search."""
         # Step 1: Generate talent queries
         self.logger.phase("Query expansion", "Step 1/5")
         queries = expand_talent_queries(self.prompt, filters)
@@ -324,6 +350,36 @@ class TalentPipeline:
             except Exception as e:
                 result.errors.append(f"Extraction error: {e}")
                 print(f"  Extraction error: {e}")
+
+        return all_candidates
+
+    def run(
+        self,
+        output_dir: Path | None = None,
+        max_results: int | None = None,
+        filters: dict | None = None,
+    ) -> TalentRunResult:
+        """Execute the talent discovery pipeline."""
+        result = TalentRunResult(
+            run_id=self.run_id,
+            prompt=self.prompt,
+            started_at=datetime.now(UTC),
+        )
+
+        source_type = "LinkedIn" if self.use_linkedin else "Web"
+        self.logger.phase("Starting talent discovery", f"ID={self.run_id} Source={source_type}")
+        print(
+            f"  Prompt: {self.prompt[:100]}..."
+            if len(self.prompt) > 100
+            else f"  Prompt: {self.prompt}"
+        )
+        print(f"  Source: {source_type}")
+
+        # Source candidates based on configuration
+        if self.use_linkedin:
+            all_candidates = self._run_linkedin_source(max_results, result)
+        else:
+            all_candidates = self._run_web_source(max_results, filters, result)
 
         result.total_candidates_extracted = len(all_candidates)
         print(f"  Total raw candidates: {len(all_candidates)}")
@@ -383,7 +439,9 @@ def run_talent_pipeline(
     output_dir: Path | None = None,
     max_results: int | None = None,
     filters: dict | None = None,
+    use_linkedin: bool = False,
+    linkedin_mode: str = "Full",
 ) -> TalentRunResult:
     """Convenience function to run a talent discovery pipeline."""
-    pipeline = TalentPipeline(prompt)
+    pipeline = TalentPipeline(prompt, use_linkedin=use_linkedin, linkedin_mode=linkedin_mode)
     return pipeline.run(output_dir=output_dir, max_results=max_results, filters=filters)

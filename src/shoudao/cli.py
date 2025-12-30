@@ -161,10 +161,23 @@ def check() -> None:
     default=50,
     help="Maximum number of candidates to return; use 0 for unlimited (default: 50)",
 )
+@click.option(
+    "--linkedin/--no-linkedin",
+    default=False,
+    help="Use LinkedIn as primary source (requires APIFY_API_KEY)",
+)
+@click.option(
+    "--linkedin-mode",
+    type=click.Choice(["Short", "Full"]),
+    default="Full",
+    help="LinkedIn scraper mode: Short (basic) or Full (detailed)",
+)
 def talent(
     prompt: str,
     output: str,
     max_results: int,
+    linkedin: bool,
+    linkedin_mode: str,
 ) -> None:
     """Run a talent discovery query (Gauntlet Cohort 4 style).
 
@@ -175,6 +188,8 @@ def talent(
     - Salary band estimation
 
     A candidate is qualified if we can contact them (email OR social media).
+
+    Use --linkedin to source candidates from LinkedIn instead of web search.
     """
     from .pipeline import run_talent_pipeline
 
@@ -183,11 +198,17 @@ def talent(
     if max_results <= 0:
         max_results_opt = None
 
+    if linkedin:
+        click.echo("[ShouDao] Using LinkedIn as primary source")
+        click.echo(f"[ShouDao] LinkedIn mode: {linkedin_mode}")
+
     try:
         result = run_talent_pipeline(
             prompt=prompt,
             output_dir=output_dir,
             max_results=max_results_opt,
+            use_linkedin=linkedin,
+            linkedin_mode=linkedin_mode,
         )
 
         click.echo(f"\nFound {len(result.candidates)} candidates")
@@ -267,7 +288,10 @@ def world(region: str | None, list_regions: bool) -> None:
 )
 @click.option("--max", "-n", "max_results", type=int, default=5, help="Max profiles to return")
 def linkedin(search: str | None, profile: str | None, mode: str, max_results: int) -> None:
-    """Test LinkedIn integration via Apify."""
+    """Test LinkedIn integration via Apify (for debugging).
+
+    For full candidate sourcing with exports, use: shoudao talent --linkedin
+    """
     from .linkedin import get_linkedin_provider
 
     provider = get_linkedin_provider()
@@ -284,11 +308,19 @@ def linkedin(search: str | None, profile: str | None, mode: str, max_results: in
             return
 
         click.echo(f"Found {len(profiles)} profiles:\n")
-        for p in profiles:
-            click.echo(f"  {p.name or 'Unknown'}")
-            click.echo(f"    {p.headline or 'No headline'}")
+        for p in profiles[:10]:  # Show first 10
+            # Sanitize for Windows console encoding
+            name = (p.name or "Unknown").encode("ascii", "replace").decode("ascii")
+            headline = (p.headline or "No headline").encode("ascii", "replace").decode("ascii")
+            click.echo(f"  {name}")
+            click.echo(f"    {headline}")
             click.echo(f"    {p.url}")
             click.echo()
+
+        if len(profiles) > 10:
+            click.echo(f"  ... and {len(profiles) - 10} more\n")
+
+        click.echo("Tip: Use 'shoudao talent --linkedin' for full pipeline with exports.")
 
     elif profile:
         click.echo(f"Scraping profile: {profile}\n")
