@@ -5,13 +5,14 @@ ShouDao advisor - generate outreach advice for leads.
 import os
 
 from openai import OpenAI
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from .models import Lead, ApproachAdvice
+from .models import ApproachAdvice, Lead
 
 
 class AdviceOutput(BaseModel):
     """Structured advice output from LLM."""
+
     model_config = ConfigDict(extra="forbid")
 
     recommended_angle: str = Field(..., min_length=1, max_length=300)
@@ -74,7 +75,7 @@ class Advisor:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a B2B sales advisor. Generate specific, actionable outreach advice."
+                        "content": "You are a B2B sales advisor. Generate specific, actionable outreach advice.",
                     },
                     {
                         "role": "user",
@@ -88,8 +89,8 @@ class Advisor:
                             role=role,
                             seller_context=seller_context or "B2B sales",
                             product_context=product_context or "B2B product/service",
-                        )
-                    }
+                        ),
+                    },
                 ],
                 response_format=AdviceOutput,
             )

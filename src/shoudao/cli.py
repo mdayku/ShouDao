@@ -20,43 +20,27 @@ def main() -> None:
 
 
 @main.command()
+@click.option("--prompt", "-p", required=True, help="Search prompt describing the leads you want")
 @click.option(
-    "--prompt", "-p",
-    required=True,
-    help="Search prompt describing the leads you want"
-)
-@click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     type=click.Path(),
     default="runs",
-    help="Output directory for run artifacts (default: runs/)"
+    help="Output directory for run artifacts (default: runs/)",
 )
 @click.option(
-    "--max-results", "-n",
+    "--max-results",
+    "-n",
     type=int,
     default=50,
-    help="Maximum number of leads to return (default: 50)"
+    help="Maximum number of leads to return (default: 50)",
 )
+@click.option("--country", multiple=True, help="Filter by country (can specify multiple)")
+@click.option("--industry", multiple=True, help="Filter by industry (can specify multiple)")
 @click.option(
-    "--country",
-    multiple=True,
-    help="Filter by country (can specify multiple)"
+    "--product-context", default="", help="What product/service you're selling (for better advice)"
 )
-@click.option(
-    "--industry",
-    multiple=True,
-    help="Filter by industry (can specify multiple)"
-)
-@click.option(
-    "--product-context",
-    default="",
-    help="What product/service you're selling (for better advice)"
-)
-@click.option(
-    "--seller-context",
-    default="",
-    help="Who you are (for better personalization)"
-)
+@click.option("--seller-context", default="", help="Who you are (for better personalization)")
 def run(
     prompt: str,
     output: str,

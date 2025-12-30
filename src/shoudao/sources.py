@@ -4,30 +4,31 @@ Produces sources.json for debugging and client trust.
 """
 
 import json
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
 class QueryRecord:
     """A search query that was executed."""
+
     query: str
     provider: str
     urls_returned: int
-    executed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    executed_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
 class UrlRecord:
     """A URL that was discovered and potentially fetched."""
+
     url: str
     source_query: str
     was_fetched: bool = False
-    fetch_status: Optional[int] = None
-    fetch_error: Optional[str] = None
-    fetched_at: Optional[str] = None
+    fetch_status: int | None = None
+    fetch_error: str | None = None
+    fetched_at: str | None = None
     content_length: int = 0
     leads_extracted: int = 0
 
@@ -35,10 +36,11 @@ class UrlRecord:
 @dataclass
 class SourcesLog:
     """Complete audit log of source discovery and fetching."""
+
     run_id: str
     prompt: str
-    started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    finished_at: Optional[str] = None
+    started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    finished_at: str | None = None
 
     # Queries
     queries: list[QueryRecord] = field(default_factory=list)
@@ -61,11 +63,13 @@ class SourcesLog:
 
     def add_query(self, query: str, provider: str, urls: list[str]) -> None:
         """Record a search query and its results."""
-        self.queries.append(QueryRecord(
-            query=query,
-            provider=provider,
-            urls_returned=len(urls),
-        ))
+        self.queries.append(
+            QueryRecord(
+                query=query,
+                provider=provider,
+                urls_returned=len(urls),
+            )
+        )
         self.urls_discovered.extend(urls)
         self.total_queries += 1
         self.total_urls_discovered += len(urls)
@@ -97,7 +101,7 @@ class SourcesLog:
             was_fetched=True,
             fetch_status=status_code if success else None,
             fetch_error=error if not success else None,
-            fetched_at=datetime.now(timezone.utc).isoformat(),
+            fetched_at=datetime.now(UTC).isoformat(),
             content_length=content_length,
             leads_extracted=leads_extracted,
         )
@@ -110,7 +114,7 @@ class SourcesLog:
 
     def finish(self) -> None:
         """Mark the log as complete."""
-        self.finished_at = datetime.now(timezone.utc).isoformat()
+        self.finished_at = datetime.now(UTC).isoformat()
 
     def save(self, path: Path) -> None:
         """Save to JSON file."""
@@ -121,8 +125,8 @@ class SourcesLog:
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL."""
         from urllib.parse import urlparse
+
         try:
             return urlparse(url).netloc.lower()
         except Exception:
             return "unknown"
-

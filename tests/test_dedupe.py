@@ -1,13 +1,13 @@
 """Tests for dedupe and scoring."""
 
-from shoudao.models import Lead, Organization, Evidence
 from shoudao.dedupe import (
-    normalize_domain,
-    normalize_org_name,
     compute_dedupe_key,
     dedupe_leads,
+    normalize_domain,
+    normalize_org_name,
     score_lead,
 )
+from shoudao.models import Evidence, Lead, Organization
 
 
 class TestNormalizeDomain:
@@ -78,9 +78,7 @@ class TestDedupe:
         leads = dedupe_leads([sample_lead, sample_lead])
         assert len(leads) == 1
 
-    def test_dedupe_different(
-        self, sample_lead: Lead, sample_evidence: Evidence
-    ) -> None:
+    def test_dedupe_different(self, sample_lead: Lead, sample_evidence: Evidence) -> None:
         """Test keeping different leads."""
         org2 = Organization(
             name="Other Corp",
@@ -107,4 +105,3 @@ class TestScoreLead:
         lead = Lead(organization=org)
         score = score_lead(lead)
         assert score < 0.5  # No contacts, no website
-

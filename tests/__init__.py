@@ -1,2 +1,1 @@
 """ShouDao test suite."""
-

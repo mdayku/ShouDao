@@ -10,18 +10,22 @@ Key design:
 
 import os
 import re
-from typing import Optional
 from urllib.parse import urlparse
 
 from openai import OpenAI
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from .models import (
-    Lead, Organization, Contact, ContactChannel, Evidence,
-    RoleCategory, OrgType, ContactChannelType
-)
 from .fetcher import FetchResult
-
+from .models import (
+    Contact,
+    ContactChannel,
+    ContactChannelType,
+    Evidence,
+    Lead,
+    Organization,
+    OrgType,
+    RoleCategory,
+)
 
 # =============================================================================
 # EXTRACTION SCHEMAS (for OpenAI structured outputs)
@@ -31,6 +35,7 @@ from .fetcher import FetchResult
 
 class ExtractedChannel(BaseModel):
     """A contact channel extracted from a page."""
+
     model_config = ConfigDict(extra="forbid")
 
     type: ContactChannelType
@@ -39,10 +44,11 @@ class ExtractedChannel(BaseModel):
 
 class ExtractedContact(BaseModel):
     """A contact extracted from a page, associated with a specific org."""
+
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = None
-    title: Optional[str] = None
+    name: str | None = None
+    title: str | None = None
     role_category: RoleCategory = "other"
     channels: list[ExtractedChannel] = Field(default_factory=list)
 
@@ -52,18 +58,19 @@ class ExtractedLead(BaseModel):
     A lead extracted from a page: org + its contacts together.
     This is the key fix: contacts are nested under their org.
     """
+
     model_config = ConfigDict(extra="forbid")
 
     # Organization info
     org_name: str = Field(..., min_length=1)
     org_type: OrgType = "other"
     industries: list[str] = Field(default_factory=list)
-    country: Optional[str] = None
-    region: Optional[str] = None
-    city: Optional[str] = None
-    website: Optional[str] = None
-    size_indicator: Optional[str] = None
-    description: Optional[str] = None
+    country: str | None = None
+    region: str | None = None
+    city: str | None = None
+    website: str | None = None
+    size_indicator: str | None = None
+    description: str | None = None
 
     # Contacts associated with THIS org
     contacts: list[ExtractedContact] = Field(default_factory=list)
@@ -71,6 +78,7 @@ class ExtractedLead(BaseModel):
 
 class ExtractionResult(BaseModel):
     """Result of extracting leads from a page."""
+
     model_config = ConfigDict(extra="forbid")
 
     leads: list[ExtractedLead] = Field(default_factory=list)
@@ -124,12 +132,12 @@ class Extractor:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You extract B2B leads from webpages. Each lead = one organization + its contacts. Be precise."
+                        "content": "You extract B2B leads from webpages. Each lead = one organization + its contacts. Be precise.",
                     },
                     {
                         "role": "user",
-                        "content": EXTRACTION_PROMPT.format(prompt=prompt, content=content)
-                    }
+                        "content": EXTRACTION_PROMPT.format(prompt=prompt, content=content),
+                    },
                 ],
                 response_format=ExtractionResult,
             )
@@ -233,16 +241,16 @@ def _normalize_domain(url_or_domain: str) -> str:
 # =============================================================================
 
 EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-PHONE_REGEX = re.compile(r"[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}")
+PHONE_REGEX = re.compile(
+    r"[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}"
+)
 
 
 def extract_emails_regex(text: str) -> list[str]:
     """Extract emails using regex (fallback)."""
     emails = EMAIL_REGEX.findall(text)
     filtered = [
-        e for e in emails
-        if not e.endswith((".png", ".jpg", ".gif"))
-        and "@example" not in e
+        e for e in emails if not e.endswith((".png", ".jpg", ".gif")) and "@example" not in e
     ]
     return list(set(filtered))
 

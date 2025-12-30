@@ -1,11 +1,18 @@
 """Pytest configuration and fixtures."""
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from shoudao.models import (
-    Evidence, ContactChannel, Contact, Organization, Lead, ApproachAdvice,
-    RunConfig, RunResult
+    ApproachAdvice,
+    Contact,
+    ContactChannel,
+    Evidence,
+    Lead,
+    Organization,
+    RunConfig,
+    RunResult,
 )
 
 
@@ -15,7 +22,7 @@ def sample_evidence() -> Evidence:
     return Evidence(
         url="https://example.com/about",
         snippet="Contact our team at info@example.com",
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 
@@ -106,4 +113,3 @@ def sample_run_result(sample_run_config: RunConfig, sample_lead: Lead) -> RunRes
         sources_fetched=5,
         domains_hit=3,
     )
-

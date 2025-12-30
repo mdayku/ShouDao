@@ -1,12 +1,12 @@
 """Tests for CSV exporter."""
 
-import io
 import csv
+import io
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from shoudao.exporter import CSV_COLUMNS, export_csv, lead_to_row
 from shoudao.models import Lead
-from shoudao.exporter import export_csv, lead_to_row, CSV_COLUMNS
 
 
 class TestLeadToRow:
@@ -56,7 +56,7 @@ class TestExportCsv:
             assert count == 1
             assert path.exists()
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 rows = list(reader)
 
@@ -80,4 +80,3 @@ class TestExportCsv:
         count = export_csv([sample_lead, sample_lead], output)
 
         assert count == 2
-

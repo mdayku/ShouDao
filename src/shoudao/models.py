@@ -11,25 +11,42 @@ Design principles:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Literal, Optional, Any
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from datetime import UTC, datetime
+from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 # =============================================================================
 # TYPE LITERALS (extensible via Literal union)
 # =============================================================================
 
 RoleCategory = Literal[
-    "owner", "exec", "founder", "ceo", "director",
-    "procurement", "operations", "project", "sales",
-    "manager", "engineer", "other"
+    "owner",
+    "exec",
+    "founder",
+    "ceo",
+    "director",
+    "procurement",
+    "operations",
+    "project",
+    "sales",
+    "manager",
+    "engineer",
+    "other",
 ]
 
 OrgType = Literal[
-    "contractor", "developer", "supplier", "distributor",
-    "manufacturer", "agency", "consultant", "architect",
-    "retailer", "wholesaler", "other"
+    "contractor",
+    "developer",
+    "supplier",
+    "distributor",
+    "manufacturer",
+    "agency",
+    "consultant",
+    "architect",
+    "retailer",
+    "wholesaler",
+    "other",
 ]
 
 ContactChannelType = Literal["email", "phone", "linkedin", "contact_page", "other"]
@@ -46,8 +63,10 @@ class Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     url: HttpUrl = Field(..., description="Source URL where data was found")
-    snippet: Optional[str] = Field(default=None, max_length=500, description="Short text snippet as proof")
-    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    snippet: str | None = Field(
+        default=None, max_length=500, description="Short text snippet as proof"
+    )
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # =============================================================================
@@ -62,7 +81,9 @@ class ContactChannel(BaseModel):
 
     type: ContactChannelType
     value: str = Field(..., min_length=1, description="The actual value (email, phone, URL)")
-    evidence: list[Evidence] = Field(..., min_length=1, description="At least one evidence source required")
+    evidence: list[Evidence] = Field(
+        ..., min_length=1, description="At least one evidence source required"
+    )
 
 
 # =============================================================================
@@ -75,10 +96,12 @@ class Contact(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = Field(default=None, description="Full name")
-    title: Optional[str] = Field(default=None, description="Job title")
+    name: str | None = Field(default=None, description="Full name")
+    title: str | None = Field(default=None, description="Job title")
     role_category: RoleCategory = Field(default="other", description="Role bucket")
-    channels: list[ContactChannel] = Field(default_factory=list, description="Contact channels with evidence")
+    channels: list[ContactChannel] = Field(
+        default_factory=list, description="Contact channels with evidence"
+    )
 
 
 # =============================================================================
@@ -98,18 +121,20 @@ class Organization(BaseModel):
     industries: list[str] = Field(default_factory=list, description="Industry labels")
 
     # Geography
-    country: Optional[str] = Field(default=None, description="Country or territory")
-    region: Optional[str] = Field(default=None, description="State/province/region")
-    city: Optional[str] = Field(default=None, description="City")
+    country: str | None = Field(default=None, description="Country or territory")
+    region: str | None = Field(default=None, description="State/province/region")
+    city: str | None = Field(default=None, description="City")
 
     # Digital presence
-    website: Optional[HttpUrl] = Field(default=None, description="Primary domain")
+    website: HttpUrl | None = Field(default=None, description="Primary domain")
 
     # Size indicator (proxy-based)
-    size_indicator: Optional[str] = Field(default=None, description="small/medium/large/enterprise or count")
+    size_indicator: str | None = Field(
+        default=None, description="small/medium/large/enterprise or count"
+    )
 
     # Description
-    description: Optional[str] = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=500)
 
     # General evidence for the org itself
     evidence: list[Evidence] = Field(default_factory=list)
@@ -125,9 +150,15 @@ class ApproachAdvice(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    recommended_angle: str = Field(..., min_length=1, max_length=300, description="1-2 line outreach angle")
-    recommended_first_offer: str = Field(..., min_length=1, max_length=200, description="What to offer first")
-    qualifying_question: str = Field(..., min_length=1, max_length=200, description="One qualifying question")
+    recommended_angle: str = Field(
+        ..., min_length=1, max_length=300, description="1-2 line outreach angle"
+    )
+    recommended_first_offer: str = Field(
+        ..., min_length=1, max_length=200, description="What to offer first"
+    )
+    qualifying_question: str = Field(
+        ..., min_length=1, max_length=200, description="One qualifying question"
+    )
 
 
 # =============================================================================
@@ -146,12 +177,16 @@ class Lead(BaseModel):
     organization: Organization
     contacts: list[Contact] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Quality score 0-1")
-    evidence: list[Evidence] = Field(default_factory=list, description="General evidence for this lead")
-    advice: Optional[ApproachAdvice] = Field(default=None)
-    dedupe_key: Optional[str] = Field(default=None, description="Normalized key for deduplication")
+    evidence: list[Evidence] = Field(
+        default_factory=list, description="General evidence for this lead"
+    )
+    advice: ApproachAdvice | None = Field(default=None)
+    dedupe_key: str | None = Field(default=None, description="Normalized key for deduplication")
 
     # Query context
-    query_context: Optional[str] = Field(default=None, description="The prompt that generated this lead")
+    query_context: str | None = Field(
+        default=None, description="The prompt that generated this lead"
+    )
 
     def has_usable_contact(self) -> bool:
         """Check if lead has at least one usable contact channel."""
@@ -169,11 +204,11 @@ class Lead(BaseModel):
                 urls.extend(str(e.url) for e in channel.evidence)
         return list(set(urls))
 
-    def get_primary_contact(self) -> Optional[Contact]:
+    def get_primary_contact(self) -> Contact | None:
         """Get the first/primary contact if any."""
         return self.contacts[0] if self.contacts else None
 
-    def get_primary_email(self) -> Optional[str]:
+    def get_primary_email(self) -> str | None:
         """Get the first email found."""
         for contact in self.contacts:
             for channel in contact.channels:
@@ -181,7 +216,7 @@ class Lead(BaseModel):
                     return channel.value
         return None
 
-    def get_primary_phone(self) -> Optional[str]:
+    def get_primary_phone(self) -> str | None:
         """Get the first phone found."""
         for contact in self.contacts:
             for channel in contact.channels:
@@ -204,12 +239,14 @@ class QueryRecipe(BaseModel):
     prompt: str = Field(..., min_length=1, description="The search prompt")
 
     # Filters (generic dict for flexibility)
-    region: Optional[dict[str, Any]] = Field(default=None, description="Region filter config")
+    region: dict[str, Any] | None = Field(default=None, description="Region filter config")
     segments: list[str] = Field(default_factory=list, description="Target segments")
     role_targets: list[RoleCategory] = Field(default_factory=list, description="Target roles")
 
     # Policy
-    policy: dict[str, Any] = Field(default_factory=dict, description="allow/block lists, max pages, etc.")
+    policy: dict[str, Any] = Field(
+        default_factory=dict, description="allow/block lists, max pages, etc."
+    )
 
     # Seed sources
     seed_sources: list[str] = Field(default_factory=list, description="Known-good URLs to crawl")
@@ -226,7 +263,7 @@ class RunConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str = Field(..., min_length=1, description="The user's search prompt")
-    recipe_slug: Optional[str] = Field(default=None, description="If run from a recipe")
+    recipe_slug: str | None = Field(default=None, description="If run from a recipe")
 
     # Filters (simplified for MVP)
     countries: list[str] = Field(default_factory=list)
@@ -257,8 +294,8 @@ class RunResult(BaseModel):
     config: RunConfig
     leads: list[Lead] = Field(default_factory=list)
     run_id: str = Field(default="")
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    finished_at: Optional[datetime] = Field(default=None)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    finished_at: datetime | None = Field(default=None)
 
     # Stats
     sources_fetched: int = Field(default=0)

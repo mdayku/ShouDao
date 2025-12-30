@@ -3,7 +3,7 @@ ShouDao fetcher - polite HTTP fetching with rate limiting.
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import httpx
@@ -14,6 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 @dataclass
 class FetchResult:
     """Result of fetching a URL."""
+
     url: str
     success: bool
     status_code: int = 0
@@ -25,6 +26,7 @@ class FetchResult:
 @dataclass
 class FetcherConfig:
     """Fetcher configuration."""
+
     timeout: float = 30.0
     max_retries: int = 2
     delay_between_requests: float = 1.0  # Seconds between requests to same domain
@@ -162,4 +164,3 @@ def dedupe_by_domain(urls: list[str], max_per_domain: int = 3) -> list[str]:
             domain_counts[domain] = count + 1
 
     return result
-

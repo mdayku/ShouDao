@@ -24,10 +24,21 @@ def normalize_domain(url_or_domain: str) -> str:
 def normalize_org_name(name: str) -> str:
     """Normalize organization name for deduplication."""
     name = name.lower().strip()
-    suffixes = [" llc", " inc", " ltd", " corp", " co", " company", " limited", " gmbh", " ag", " sa"]
+    suffixes = [
+        " llc",
+        " inc",
+        " ltd",
+        " corp",
+        " co",
+        " company",
+        " limited",
+        " gmbh",
+        " ag",
+        " sa",
+    ]
     for suffix in suffixes:
         if name.endswith(suffix):
-            name = name[:-len(suffix)]
+            name = name[: -len(suffix)]
     name = "".join(c for c in name if c.isalnum() or c.isspace())
     name = " ".join(name.split())
     return name
@@ -114,11 +125,7 @@ def score_lead(lead: Lead) -> float:
     score = 0.0
 
     # +0.25 if email found with evidence
-    has_email = any(
-        ch.type == "email" and ch.evidence
-        for c in lead.contacts
-        for ch in c.channels
-    )
+    has_email = any(ch.type == "email" and ch.evidence for c in lead.contacts for ch in c.channels)
     if has_email:
         score += 0.25
 
@@ -135,11 +142,7 @@ def score_lead(lead: Lead) -> float:
         score += 0.20
 
     # +0.15 if phone found
-    has_phone = any(
-        ch.type == "phone"
-        for c in lead.contacts
-        for ch in c.channels
-    )
+    has_phone = any(ch.type == "phone" for c in lead.contacts for ch in c.channels)
     if has_phone:
         score += 0.15
 

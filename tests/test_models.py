@@ -4,8 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from shoudao.models import (
-    Evidence, ContactChannel, Contact, Organization, Lead, ApproachAdvice,
-    RunConfig, QueryRecipe
+    ApproachAdvice,
+    Contact,
+    ContactChannel,
+    Evidence,
+    Lead,
+    Organization,
+    RunConfig,
 )
 
 
@@ -205,4 +210,3 @@ class TestRunConfig:
 
         with pytest.raises(ValidationError):
             RunConfig(prompt="test", max_results=1000)
-

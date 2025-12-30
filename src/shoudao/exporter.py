@@ -9,7 +9,6 @@ from typing import TextIO
 
 from .models import Lead, RunResult
 
-
 # CSV column order (stable schema - derived from Lead model)
 CSV_COLUMNS = [
     # Organization

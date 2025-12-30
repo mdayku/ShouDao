@@ -96,4 +96,3 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
     queries.append(f"{prompt} directory list")
 
     return queries
-

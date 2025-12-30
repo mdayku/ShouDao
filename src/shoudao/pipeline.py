@@ -4,16 +4,16 @@ Now includes sources.json for audit trail.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from .models import RunConfig, RunResult, Lead
-from .search import get_search_provider, expand_prompt_to_queries
-from .fetcher import Fetcher, FetcherConfig, filter_urls, dedupe_by_domain
-from .extractor import Extractor
-from .dedupe import dedupe_leads, score_all_leads
 from .advisor import Advisor
+from .dedupe import dedupe_leads, score_all_leads
 from .exporter import export_csv, export_json, generate_report
+from .extractor import Extractor
+from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
+from .models import Lead, RunConfig, RunResult
+from .search import expand_prompt_to_queries, get_search_provider
 from .sources import SourcesLog
 
 
@@ -29,7 +29,7 @@ class Pipeline:
         result = RunResult(
             config=self.config,
             run_id=self.run_id,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
         # Initialize sources log for audit trail
@@ -156,10 +156,10 @@ class Pipeline:
         print(f"  Advice generated for {len(leads)} leads")
 
         # Cap at max_results, sorted by confidence
-        leads = sorted(leads, key=lambda l: -l.confidence)[:self.config.max_results]
+        leads = sorted(leads, key=lambda lead: -lead.confidence)[: self.config.max_results]
 
         result.leads = leads
-        result.finished_at = datetime.now(timezone.utc)
+        result.finished_at = datetime.now(UTC)
         sources_log.finish()
 
         # Export outputs
@@ -177,7 +177,7 @@ class Pipeline:
             generate_report(result, report_path)
             sources_log.save(sources_path)
 
-            print(f"\n[ShouDao] Run complete!")
+            print("\n[ShouDao] Run complete!")
             print(f"  Output: {run_dir}")
             print(f"  Leads: {len(leads)}")
             print(f"  CSV: {csv_path}")
