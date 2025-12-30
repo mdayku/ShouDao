@@ -1,0 +1,292 @@
+# ShouDao World Context
+# Authoritative facts for query planning - NOT inside the LLM
+# Source: Manual compilation + World Bank / CIA Factbook
+
+regions:
+  caribbean:
+    name: "Caribbean"
+    description: "Island nations and territories in the Caribbean Sea"
+    countries:
+      # English-first (Commonwealth Caribbean)
+      - code: JM
+        name: Jamaica
+        languages: [en]
+        population: 2960000
+        gdp_bucket: medium  # ~$16B
+        import_reliance: high
+        china_trade: active
+        construction_activity: medium-high
+        notes: "Hotel/resort-heavy construction sector. Active hurricane market."
+
+      - code: TT
+        name: Trinidad and Tobago
+        languages: [en]
+        population: 1400000
+        gdp_bucket: medium  # ~$24B
+        import_reliance: medium
+        china_trade: active
+        construction_activity: high
+        notes: "Oil/gas wealth. Industrial construction. Regional trade hub."
+
+      - code: BB
+        name: Barbados
+        languages: [en]
+        population: 290000
+        gdp_bucket: small  # ~$5B
+        import_reliance: high
+        china_trade: moderate
+        construction_activity: medium
+        notes: "Tourism-driven. Hurricane-resistant building codes."
+
+      - code: BS
+        name: Bahamas
+        languages: [en]
+        population: 400000
+        gdp_bucket: medium  # ~$12B
+        import_reliance: high
+        china_trade: moderate
+        construction_activity: medium-high
+        notes: "Resort/luxury construction. Nassau + Family Islands."
+
+      - code: KY
+        name: Cayman Islands
+        languages: [en]
+        population: 70000
+        gdp_bucket: small  # ~$6B but high per capita
+        import_reliance: very_high
+        china_trade: moderate
+        construction_activity: high
+        notes: "Financial hub. High-end residential + commercial."
+
+      - code: TC
+        name: Turks and Caicos
+        languages: [en]
+        population: 45000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: medium
+        notes: "Resort development. UK territory."
+
+      - code: LC
+        name: Saint Lucia
+        languages: [en]
+        population: 180000
+        gdp_bucket: small
+        import_reliance: high
+        china_trade: moderate
+        construction_activity: medium
+        notes: "Tourism infrastructure. Hurricane recovery projects."
+
+      - code: GD
+        name: Grenada
+        languages: [en]
+        population: 125000
+        gdp_bucket: tiny
+        import_reliance: high
+        china_trade: active
+        construction_activity: medium
+        notes: "Spice isle. Chinese-funded infrastructure projects."
+
+      - code: AG
+        name: Antigua and Barbuda
+        languages: [en]
+        population: 100000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: active
+        construction_activity: medium
+        notes: "Citizenship by investment driving construction."
+
+      - code: VC
+        name: Saint Vincent and the Grenadines
+        languages: [en]
+        population: 110000
+        gdp_bucket: tiny
+        import_reliance: high
+        china_trade: active
+        construction_activity: low
+        notes: "Volcanic recovery. Chinese aid projects."
+
+      - code: DM
+        name: Dominica
+        languages: [en]
+        population: 72000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: active
+        construction_activity: medium
+        notes: "Hurricane Maria recovery. Geothermal projects."
+
+      - code: VG
+        name: British Virgin Islands
+        languages: [en]
+        population: 30000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: medium
+        notes: "Luxury villas. Hurricane rebuilding."
+
+      - code: VI
+        name: US Virgin Islands
+        languages: [en]
+        population: 100000
+        gdp_bucket: small
+        import_reliance: high
+        china_trade: low
+        construction_activity: medium
+        notes: "US territory. Hurricane recovery. Tourism."
+
+      # Spanish-first
+      - code: PR
+        name: Puerto Rico
+        languages: [es, en]
+        population: 3200000
+        gdp_bucket: large  # ~$100B
+        import_reliance: high
+        china_trade: moderate
+        construction_activity: high
+        notes: "US territory. Hurricane Maria recovery. Largest Caribbean market."
+
+      - code: DO
+        name: Dominican Republic
+        languages: [es]
+        population: 11000000
+        gdp_bucket: large  # ~$90B
+        import_reliance: medium
+        china_trade: active
+        construction_activity: very_high
+        notes: "Fastest growing Caribbean economy. Hotel/resort boom."
+
+      - code: CU
+        name: Cuba
+        languages: [es]
+        population: 11000000
+        gdp_bucket: medium  # ~$100B but isolated
+        import_reliance: high
+        china_trade: active
+        construction_activity: medium
+        notes: "Sanctions limit US trade. China/Spain main partners."
+
+      # French-first
+      - code: HT
+        name: Haiti
+        languages: [fr, ht]
+        population: 11500000
+        gdp_bucket: small  # ~$20B
+        import_reliance: very_high
+        china_trade: moderate
+        construction_activity: medium
+        notes: "Earthquake recovery. Humanitarian construction."
+
+      - code: GP
+        name: Guadeloupe
+        languages: [fr]
+        population: 400000
+        gdp_bucket: small
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: medium
+        notes: "French overseas territory. EU standards apply."
+
+      - code: MQ
+        name: Martinique
+        languages: [fr]
+        population: 375000
+        gdp_bucket: small
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: medium
+        notes: "French overseas territory. EU standards apply."
+
+      - code: BL
+        name: Saint Barthelemy
+        languages: [fr]
+        population: 10000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: high
+        notes: "Ultra-luxury market. High-end villas."
+
+      - code: MF
+        name: Saint Martin (French)
+        languages: [fr]
+        population: 35000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: high
+        notes: "Hurricane Irma recovery. Dual French/Dutch island."
+
+      # Dutch-first
+      - code: AW
+        name: Aruba
+        languages: [nl, pap, en]
+        population: 110000
+        gdp_bucket: small  # ~$3B
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: high
+        notes: "Dutch territory. Tourism + refinery. High per capita."
+
+      - code: CW
+        name: Curacao
+        languages: [nl, pap, en]
+        population: 150000
+        gdp_bucket: small
+        import_reliance: high
+        china_trade: moderate
+        construction_activity: medium
+        notes: "Dutch territory. Oil refinery. Regional trade hub."
+
+      - code: SX
+        name: Sint Maarten
+        languages: [nl, en]
+        population: 45000
+        gdp_bucket: tiny
+        import_reliance: very_high
+        china_trade: low
+        construction_activity: high
+        notes: "Dutch territory. Hurricane Irma recovery. Cruise port."
+
+# Language metadata
+languages:
+  en:
+    name: English
+    keywords:
+      products: [windows, doors, "windows and doors", glazing, "aluminum windows", "impact windows"]
+      types: [supplier, distributor, installer, manufacturer, contractor]
+      modifiers: [hurricane, impact, uPVC, aluminum]
+  es:
+    name: Spanish
+    keywords:
+      products: [ventanas, puertas, "ventanas y puertas", vidriería, "carpintería aluminio"]
+      types: [proveedor, distribuidor, instalador, fabricante, contratista]
+      modifiers: [huracán, impacto, PVC, aluminio]
+  fr:
+    name: French
+    keywords:
+      products: [fenêtres, portes, "portes et fenêtres", vitrerie, "menuiserie aluminium"]
+      types: [fournisseur, distributeur, installateur, fabricant, entrepreneur]
+      modifiers: [ouragan, cyclone, PVC, aluminium]
+  nl:
+    name: Dutch
+    keywords:
+      products: [ramen, deuren, "ramen en deuren", glas, kozijnen]
+      types: [leverancier, distributeur, installateur, fabrikant, aannemer]
+      modifiers: [orkaan, aluminium, PVC]
+  pap:
+    name: Papiamento
+    keywords:
+      products: [bentana, porta]
+      types: [suplidor]
+      modifiers: []
+  ht:
+    name: Haitian Creole
+    keywords:
+      products: [fenèt, pòt]
+      types: [founisè]
+      modifiers: []
+
