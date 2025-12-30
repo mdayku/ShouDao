@@ -1,10 +1,85 @@
 """
 ShouDao dedupe + scoring engine.
+Includes buyer-only gate and Caribbean country filter.
 """
 
 from urllib.parse import urlparse
 
 from .models import Lead
+
+# =============================================================================
+# CARIBBEAN COUNTRY WHITELIST
+# =============================================================================
+
+CARIBBEAN_COUNTRIES = {
+    # English-speaking
+    "jamaica",
+    "trinidad",
+    "trinidad and tobago",
+    "barbados",
+    "bahamas",
+    "the bahamas",
+    "cayman islands",
+    "cayman",
+    "turks and caicos",
+    "saint lucia",
+    "st. lucia",
+    "st lucia",
+    "grenada",
+    "antigua",
+    "antigua and barbuda",
+    "saint vincent",
+    "st. vincent",
+    "st vincent",
+    "saint vincent and the grenadines",
+    "dominica",
+    "british virgin islands",
+    "bvi",
+    "us virgin islands",
+    "usvi",
+    # Spanish-speaking
+    "puerto rico",
+    "dominican republic",
+    "cuba",
+    # French-speaking
+    "haiti",
+    "guadeloupe",
+    "martinique",
+    "saint barthelemy",
+    "st. barthelemy",
+    "st barth",
+    "saint martin",
+    "st. martin",
+    # Dutch-speaking
+    "aruba",
+    "curacao",
+    "curaçao",
+    "sint maarten",
+    # Generic
+    "caribbean",
+}
+
+# Exporter/foreign manufacturer signals
+EXPORTER_SIGNALS = [
+    "export",
+    "exporter",
+    "international",
+    "overseas",
+    "global",
+    "worldwide",
+    "import and export",
+    "trading company",
+    "factory direct",
+    "oem",
+    "odm",
+    "bulk supplier",
+]
+
+# Buyer-friendly org types
+BUYER_ORG_TYPES = {"distributor", "installer", "contractor", "supplier", "retailer", "consultant"}
+
+# Non-buyer org types that need extra scrutiny
+MANUFACTURER_TYPES = {"manufacturer"}
 
 
 def normalize_domain(url_or_domain: str) -> str:
@@ -120,43 +195,166 @@ def dedupe_leads(leads: list[Lead]) -> list[Lead]:
     return list(by_key.values())
 
 
+def is_caribbean_country(country: str | None) -> bool:
+    """Check if a country is in the Caribbean whitelist."""
+    if not country:
+        return False
+    return country.lower().strip() in CARIBBEAN_COUNTRIES
+
+
+def has_exporter_signals(lead: Lead) -> bool:
+    """Check if lead has signals of being an exporter/foreign manufacturer."""
+    text_to_check = " ".join(
+        [
+            lead.organization.name.lower(),
+            (lead.organization.description or "").lower(),
+            " ".join(lead.organization.industries).lower(),
+        ]
+    )
+
+    for signal in EXPORTER_SIGNALS:
+        if signal in text_to_check:
+            return True
+
+    return False
+
+
+def apply_buyer_gate(leads: list[Lead]) -> list[Lead]:
+    """
+    Apply buyer-only role gate.
+
+    KEEP: Caribbean-based distributors, installers, contractors, suppliers
+    FLAG: Manufacturers (unless clearly local)
+    DROP: Foreign exporters, international brands
+
+    Returns filtered list with needs_review flags set appropriately.
+    """
+    filtered = []
+
+    for lead in leads:
+        country = lead.organization.country
+        org_type = lead.organization.org_type
+        is_caribbean = is_caribbean_country(country)
+        is_exporter = has_exporter_signals(lead)
+
+        # Always drop if clearly an exporter
+        if is_exporter and not is_caribbean:
+            continue  # Drop
+
+        # Keep Caribbean-based buyers
+        if is_caribbean and org_type in BUYER_ORG_TYPES:
+            filtered.append(lead)
+            continue
+
+        # Manufacturers need extra scrutiny
+        if org_type in MANUFACTURER_TYPES:
+            if is_caribbean:
+                # Local manufacturer is OK, but flag for review
+                lead.needs_review = True
+                filtered.append(lead)
+            elif is_exporter:
+                continue  # Drop foreign exporters
+            else:
+                # Unknown - flag for review
+                lead.needs_review = True
+                filtered.append(lead)
+            continue
+
+        # Non-Caribbean unknown types
+        if not is_caribbean:
+            if country and country.lower() not in {"unknown", ""}:
+                # Has a country but not Caribbean - drop
+                continue
+            else:
+                # Unknown country - flag for review
+                lead.needs_review = True
+                filtered.append(lead)
+            continue
+
+        # Everything else: keep but may flag
+        filtered.append(lead)
+
+    return filtered
+
+
 def score_lead(lead: Lead) -> float:
-    """Score a lead based on evidence quality. Returns 0-1."""
+    """
+    Score a lead based on evidence quality and buyer relevance.
+    Returns 0-1.
+
+    Scoring factors:
+    - Contact quality (email, phone, role)
+    - Evidence quality (multiple sources)
+    - Caribbean location (bonus)
+    - Hotel/resort/hurricane mentions (bonus)
+    - Exporter signals (penalty)
+    - Domain misalignment (penalty)
+    """
     score = 0.0
 
-    # +0.25 if email found with evidence
+    # +0.20 if email found with evidence
     has_email = any(ch.type == "email" and ch.evidence for c in lead.contacts for ch in c.channels)
     if has_email:
-        score += 0.25
+        score += 0.20
 
-    # +0.20 if role matches target roles
+    # +0.15 if role matches target roles
     target_roles = {"owner", "exec", "founder", "ceo", "director", "procurement", "sales"}
     for contact in lead.contacts:
         if contact.role_category in target_roles:
-            score += 0.20
+            score += 0.15
             break
 
-    # +0.20 if multiple evidence sources
+    # +0.15 if multiple evidence sources
     evidence_count = len(lead.evidence) + len(lead.organization.evidence)
     if evidence_count >= 2:
-        score += 0.20
-
-    # +0.15 if phone found
-    has_phone = any(ch.type == "phone" for c in lead.contacts for ch in c.channels)
-    if has_phone:
         score += 0.15
 
-    # +0.10 if website exists
+    # +0.10 if phone found
+    has_phone = any(ch.type == "phone" for c in lead.contacts for ch in c.channels)
+    if has_phone:
+        score += 0.10
+
+    # +0.05 if website exists
     if lead.organization.website:
-        score += 0.10
+        score += 0.05
 
-    # +0.10 if description exists
+    # +0.05 if description exists
     if lead.organization.description:
+        score += 0.05
+
+    # === BUYER RELEVANCE BONUSES ===
+
+    # +0.20 if Caribbean-based
+    if is_caribbean_country(lead.organization.country):
+        score += 0.20
+
+    # +0.10 if mentions hotels/resorts/hurricane
+    desc = (lead.organization.description or "").lower()
+    industries = " ".join(lead.organization.industries).lower()
+    combined_text = f"{desc} {industries}"
+
+    hotel_signals = ["hotel", "resort", "hospitality", "tourism", "commercial"]
+    hurricane_signals = ["hurricane", "impact", "storm", "cyclone"]
+
+    if any(sig in combined_text for sig in hotel_signals):
         score += 0.10
 
-    # PENALTY: -0.30 if domain not aligned (extracted from different domain than org website)
+    if any(sig in combined_text for sig in hurricane_signals):
+        score += 0.10
+
+    # === PENALTIES ===
+
+    # -0.25 if domain not aligned
     if not lead.domain_aligned:
-        score -= 0.30
+        score -= 0.25
+
+    # -0.20 if exporter signals detected
+    if has_exporter_signals(lead):
+        score -= 0.20
+
+    # -0.10 if country is unknown (less trustworthy)
+    if not lead.organization.country or lead.organization.country.lower() in {"unknown", ""}:
+        score -= 0.10
 
     return max(min(score, 1.0), 0.0)  # Clamp to 0-1
 

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .advisor import Advisor
-from .dedupe import dedupe_leads, score_all_leads
+from .dedupe import apply_buyer_gate, dedupe_leads, score_all_leads
 from .exporter import export_csv, export_excel, export_json, generate_report
 from .extractor import Extractor
 from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
@@ -138,12 +138,19 @@ class Pipeline:
         result.total_leads_extracted = len(all_leads)
         print(f"  Total raw leads: {len(all_leads)}")
 
-        # Step 5: Dedupe and score
-        print("[ShouDao] Step 5/6: Deduplicating and scoring...")
+        # Step 5: Dedupe, filter, and score
+        print("[ShouDao] Step 5/6: Deduplicating, filtering, and scoring...")
         leads = dedupe_leads(all_leads)
+        pre_filter_count = len(leads)
+
+        # Apply buyer-only gate (drops exporters, flags unknowns)
+        leads = apply_buyer_gate(leads)
         leads = score_all_leads(leads)
+
         result.total_leads_after_dedupe = len(leads)
-        print(f"  Leads after dedupe: {len(leads)}")
+        filtered_count = pre_filter_count - len(leads)
+        print(f"  Leads after dedupe: {pre_filter_count}")
+        print(f"  Leads after buyer gate: {len(leads)} (dropped {filtered_count} non-buyers)")
 
         # Step 6: Generate advice
         print("[ShouDao] Step 6/6: Generating outreach advice...")
