@@ -174,41 +174,45 @@ class Extractor:
             # Build contacts with evidence-backed channels
             contacts = []
             for ec in extracted_lead.contacts:
-                # Fail-soft: only include channels with non-empty values
+                # Fail-soft: only include channels with non-empty, non-sentinel values
                 channels = []
                 for ch in ec.channels:
-                    if ch.value and ch.value.strip():
+                    cleaned_value = _clean_value(ch.value)
+                    if cleaned_value:
                         channel = ContactChannel(
                             type=ch.type,
-                            value=ch.value.strip(),
+                            value=cleaned_value,
                             evidence=[evidence],
                         )
                         channels.append(channel)
 
                 # Keep contact if it has channels OR at least a name
-                if channels or ec.name:
+                cleaned_name = _clean_value(ec.name)
+                cleaned_title = _clean_value(ec.title)
+                if channels or cleaned_name:
                     contact = Contact(
-                        name=ec.name,
-                        title=ec.title,
+                        name=cleaned_name,
+                        title=cleaned_title,
                         role_category=ec.role_category,
                         channels=channels,
                     )
                     contacts.append(contact)
 
-            # Normalize website URL
+            # Normalize website URL and country
             normalized_website = _normalize_website(extracted_lead.website)
+            normalized_country = _normalize_country(extracted_lead.country)
 
             # Build organization
             organization = Organization(
                 name=extracted_lead.org_name,
                 org_type=extracted_lead.org_type,
                 industries=extracted_lead.industries,
-                country=extracted_lead.country,
-                region=extracted_lead.region,
-                city=extracted_lead.city,
+                country=normalized_country,
+                region=_clean_value(extracted_lead.region),
+                city=_clean_value(extracted_lead.city),
                 website=normalized_website,  # type: ignore
-                size_indicator=extracted_lead.size_indicator,
-                description=extracted_lead.description,
+                size_indicator=_clean_value(extracted_lead.size_indicator),
+                description=_clean_value(extracted_lead.description),
                 evidence=[evidence],
             )
 
@@ -270,6 +274,57 @@ def _normalize_website(website: str | None) -> str | None:
             return None
 
     return website
+
+
+# Sentinel values that should be treated as None/empty
+SENTINEL_VALUES = {
+    "not provided",
+    "n/a",
+    "none",
+    "unknown",
+    "not available",
+    "not specified",
+    "-",
+    "null",
+    "na",
+}
+
+
+def _clean_value(value: str | None) -> str | None:
+    """Clean a string value, converting sentinel strings to None."""
+    if not value:
+        return None
+    value = value.strip()
+    if value.lower() in SENTINEL_VALUES:
+        return None
+    return value
+
+
+# Country normalization map
+COUNTRY_ALIASES = {
+    "usa": "United States",
+    "u.s.": "United States",
+    "u.s.a.": "United States",
+    "us": "United States",
+    "united states of america": "United States",
+    "uk": "United Kingdom",
+    "u.k.": "United Kingdom",
+    "england": "United Kingdom",
+}
+
+
+def _normalize_country(country: str | None) -> str | None:
+    """Normalize country names to a consistent format."""
+    if not country:
+        return None
+    country = country.strip()
+    if country.lower() in SENTINEL_VALUES:
+        return None
+    # Check alias map
+    normalized = COUNTRY_ALIASES.get(country.lower())
+    if normalized:
+        return normalized
+    return country
 
 
 # =============================================================================

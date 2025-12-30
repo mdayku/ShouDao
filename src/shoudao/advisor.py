@@ -22,6 +22,7 @@ class AdviceOutput(BaseModel):
 
 ADVICE_PROMPT = """Generate outreach advice for this B2B lead.
 
+=== THE LEAD ===
 Organization: {org_name}
 Type: {org_type}
 Industries: {industries}
@@ -30,15 +31,21 @@ Size: {size}
 Description: {description}
 Contact Role: {role}
 
-Seller Context: {seller_context}
-Product Context: {product_context}
+=== WHO IS SELLING ===
+{seller_context}
 
-Generate:
-1. recommended_angle: 1-2 sentence positioning for initial outreach
-2. recommended_first_offer: One line - what value to lead with
-3. qualifying_question: One question to determine if they're a good fit
+=== WHAT IS BEING SOLD ===
+{product_context}
 
-Be specific and actionable. Avoid generic platitudes.
+=== YOUR TASK ===
+Generate outreach advice specifically for selling the product/service above to this lead.
+
+1. recommended_angle: 1-2 sentence positioning that connects the seller's offering to this lead's likely needs
+2. recommended_first_offer: One specific thing to offer (NOT generic "consultation" - tie to the actual product)
+3. qualifying_question: One question to determine if they're a good fit for the specific product
+
+CRITICAL: Your advice must be about selling the SPECIFIC product above, not generic B2B software/services.
+If no product context is provided, focus on the lead's industry needs.
 """
 
 
