@@ -267,6 +267,20 @@ and must fail closed (drop fields) if evidence is missing.
 - `Organization` replaces `Company` (more generic)
 - `RoleCategory`, `OrgType`, `ContactChannelType` as Literal types
 
-**Pending:**
-- Configure API keys and run first real query
-- Initialize git repo and push to GitHub
+### 2025-12-29 — v0.1.2 First Real Query + Fixes
+**Delta:** First successful end-to-end runs.
+
+**Runs completed:**
+1. Florida hotel contractors: 10 leads extracted
+2. Caribbean window suppliers: 15 leads (Caribbean Windows TCI, Domus T&T, etc.)
+
+**Fixes applied:**
+- URL normalization: bare domains get `https://` prefix, junk values filtered
+- Sentinel value cleaning: "Not provided", "N/A" → empty fields
+- Country normalization: USA/U.S. → "United States"
+- Advice prompt: now requires product-specific recommendations
+
+**Key learnings:**
+- Lead-centric extraction schema (contacts nested under org) prevents misattribution
+- Product/seller context dramatically improves advice relevance
+- sources.json provides full audit trail for debugging
