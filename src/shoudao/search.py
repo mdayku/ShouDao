@@ -167,9 +167,27 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
     queries.append(f"{prompt} directory list")
     queries.append(f"{prompt} suppliers list")
 
-    # Caribbean-specific expansions (if prompt mentions Caribbean)
+    # Caribbean-specific expansions (if prompt mentions Caribbean or Caribbean countries)
     prompt_lower = prompt.lower()
-    if "caribbean" in prompt_lower or "island" in prompt_lower:
+    caribbean_triggers = [
+        "caribbean",
+        "island",
+        "jamaica",
+        "trinidad",
+        "barbados",
+        "bahamas",
+        "puerto rico",
+        "dominican republic",
+        "haiti",
+        "guadeloupe",
+        "martinique",
+        "aruba",
+        "curacao",
+        "cayman",
+    ]
+    is_caribbean_prompt = any(trigger in prompt_lower for trigger in caribbean_triggers)
+
+    if is_caribbean_prompt:
         # Detect product category from prompt
         is_window_door = any(
             term in prompt_lower for term in ["window", "door", "glazing", "aluminum", "glass"]
