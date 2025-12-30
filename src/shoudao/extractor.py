@@ -195,6 +195,9 @@ class Extractor:
                     )
                     contacts.append(contact)
 
+            # Normalize website URL
+            normalized_website = _normalize_website(extracted_lead.website)
+
             # Build organization
             organization = Organization(
                 name=extracted_lead.org_name,
@@ -203,7 +206,7 @@ class Extractor:
                 country=extracted_lead.country,
                 region=extracted_lead.region,
                 city=extracted_lead.city,
-                website=extracted_lead.website,  # type: ignore
+                website=normalized_website,  # type: ignore
                 size_indicator=extracted_lead.size_indicator,
                 description=extracted_lead.description,
                 evidence=[evidence],
@@ -214,7 +217,7 @@ class Extractor:
                 organization=organization,
                 contacts=contacts,
                 evidence=[evidence],
-                dedupe_key=_normalize_domain(extracted_lead.website or source_url),
+                dedupe_key=_normalize_domain(normalized_website or source_url),
             )
 
             # Fail-closed at lead level: must have evidence-backed org OR usable contact
@@ -234,6 +237,39 @@ def _normalize_domain(url_or_domain: str) -> str:
     if domain.startswith("www."):
         domain = domain[4:]
     return domain
+
+
+def _normalize_website(website: str | None) -> str | None:
+    """
+    Normalize a website URL extracted by the LLM.
+    Handles bare domains, invalid values, etc.
+    """
+    if not website:
+        return None
+
+    website = website.strip()
+
+    # Filter out obvious non-URLs
+    invalid_patterns = [
+        "visit website",
+        "click here",
+        "n/a",
+        "none",
+        "not provided",
+        "unknown",
+    ]
+    if website.lower() in invalid_patterns:
+        return None
+
+    # If it looks like a bare domain, add https://
+    if not website.startswith(("http://", "https://")):
+        # Check if it looks like a domain (has a dot, no spaces)
+        if "." in website and " " not in website:
+            website = f"https://{website}"
+        else:
+            return None
+
+    return website
 
 
 # =============================================================================
