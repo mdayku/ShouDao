@@ -289,4 +289,3 @@ class TestDedupeCandidates:
         )
         unique = dedupe_candidates([c1, c2])
         assert len(unique) == 2
-

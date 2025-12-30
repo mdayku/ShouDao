@@ -1,6 +1,5 @@
 """Tests for search module - query expansion and search providers."""
 
-
 from shoudao.search import (
     CARIBBEAN_COUNTRY_LANGUAGES,
     KEYWORD_PACKS,

@@ -554,7 +554,9 @@ class TalentExtractor:
             primary_profile = _clean_value(ec.primary_profile_url)
             if not primary_profile:
                 # Fallback priority: GitHub > LinkedIn > Twitter > Website > Source
-                primary_profile = github_url or linkedin_url or twitter_url or website_url or source_url
+                primary_profile = (
+                    github_url or linkedin_url or twitter_url or website_url or source_url
+                )
 
             # Check if contactable (email OR any social)
             is_contactable = bool(email or github_url or linkedin_url or twitter_url)

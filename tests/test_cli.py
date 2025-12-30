@@ -40,5 +40,3 @@ def test_run_max_results_zero_means_unlimited(
 
     assert result.exit_code == 0
     assert captured["max_results"] is None
-
-

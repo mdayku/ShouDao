@@ -234,5 +234,3 @@ def recipe_to_run_config(recipe: Recipe) -> dict[str, Any]:
         "seller_context": recipe.context.seller,
         "seed_sources": recipe.policy.seed_sources,
     }
-
-

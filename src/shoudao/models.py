@@ -291,8 +291,12 @@ class Candidate(BaseModel):
     years_experience: int | None = Field(default=None, ge=0, description="Years of experience")
 
     # Age estimation (Gauntlet sweet spot: mean ~30, std dev ~6-7)
-    graduation_year: int | None = Field(default=None, description="Undergrad graduation year if found")
-    estimated_age: int | None = Field(default=None, ge=18, le=70, description="Estimated age in years")
+    graduation_year: int | None = Field(
+        default=None, description="Undergrad graduation year if found"
+    )
+    estimated_age: int | None = Field(
+        default=None, ge=18, le=70, description="Estimated age in years"
+    )
     age_band: AgeBand = Field(
         default="unknown",
         description="young (<24), optimal (24-36), mature (36-42), senior (>42)",
@@ -334,9 +338,7 @@ class Candidate(BaseModel):
 
     def is_contactable(self) -> bool:
         """Check if we have enough to reach out (email OR social)."""
-        return bool(
-            self.email or self.github_url or self.linkedin_url or self.twitter_url
-        )
+        return bool(self.email or self.github_url or self.linkedin_url or self.twitter_url)
 
     def get_contact_channels(self) -> list[str]:
         """Get all available contact channels."""

@@ -267,7 +267,11 @@ class TalentPipeline:
         )
 
         self.logger.phase("Starting talent discovery", f"ID={self.run_id}")
-        print(f"  Prompt: {self.prompt[:100]}..." if len(self.prompt) > 100 else f"  Prompt: {self.prompt}")
+        print(
+            f"  Prompt: {self.prompt[:100]}..."
+            if len(self.prompt) > 100
+            else f"  Prompt: {self.prompt}"
+        )
 
         # Step 1: Generate talent queries
         self.logger.phase("Query expansion", "Step 1/5")
@@ -325,7 +329,9 @@ class TalentPipeline:
         print(f"  Total raw candidates: {len(all_candidates)}")
 
         # Step 5: Dedupe, score, and classify
-        self.logger.phase("Scoring and classification", f"Step 5/5 - {len(all_candidates)} candidates")
+        self.logger.phase(
+            "Scoring and classification", f"Step 5/5 - {len(all_candidates)} candidates"
+        )
         candidates = dedupe_candidates(all_candidates)
         candidates = score_all_candidates(candidates)
 
@@ -343,7 +349,9 @@ class TalentPipeline:
         result.tier_b_count = sum(1 for c in candidates if c.overall_fit_tier == "B")
         result.tier_c_count = sum(1 for c in candidates if c.overall_fit_tier == "C")
 
-        print(f"  Tier distribution: A={result.tier_a_count}, B={result.tier_b_count}, C={result.tier_c_count}")
+        print(
+            f"  Tier distribution: A={result.tier_a_count}, B={result.tier_b_count}, C={result.tier_c_count}"
+        )
 
         result.candidates = candidates
         result.total_candidates_after_dedupe = len(candidates)

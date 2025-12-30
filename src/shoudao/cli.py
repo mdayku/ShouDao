@@ -119,7 +119,9 @@ def check() -> None:
 
     openai_key = os.getenv("OPENAI_API_KEY")
     serper_key = os.getenv("SERPER_API_KEY")
+    apify_key = os.getenv("APIFY_API_KEY")
 
+    click.echo("Required:")
     if openai_key:
         click.echo(f"  OPENAI_API_KEY: {openai_key[:8]}...{openai_key[-4:]}")
     else:
@@ -129,6 +131,12 @@ def check() -> None:
         click.echo(f"  SERPER_API_KEY: {serper_key[:8]}...{serper_key[-4:]}")
     else:
         click.echo("  SERPER_API_KEY: NOT SET (required for search)")
+
+    click.echo("\nOptional:")
+    if apify_key:
+        click.echo(f"  APIFY_API_KEY:  {apify_key[:8]}...{apify_key[-4:]} (LinkedIn enabled)")
+    else:
+        click.echo("  APIFY_API_KEY:  NOT SET (LinkedIn enrichment disabled)")
 
     if openai_key and serper_key:
         click.echo("\nAll required keys are set. Ready to run!")
@@ -245,6 +253,65 @@ def world(region: str | None, list_regions: bool) -> None:
     else:
         click.echo("Use --list-regions to see available regions")
         click.echo("Use --region <name> to see countries in that region")
+
+
+@main.command()
+@click.option("--search", "-s", default=None, help="Search for profiles by keywords")
+@click.option("--profile", "-p", default=None, help="Scrape a specific LinkedIn profile URL")
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice(["Short", "Full"]),
+    default="Short",
+    help="Scraper mode: Short (basic) or Full (detailed)",
+)
+@click.option("--max", "-n", "max_results", type=int, default=5, help="Max profiles to return")
+def linkedin(search: str | None, profile: str | None, mode: str, max_results: int) -> None:
+    """Test LinkedIn integration via Apify."""
+    from .linkedin import get_linkedin_provider
+
+    provider = get_linkedin_provider()
+    if not provider:
+        click.echo("LinkedIn not configured. Set APIFY_API_KEY in .env", err=True)
+        sys.exit(1)
+
+    if search:
+        click.echo(f"Searching LinkedIn for: {search}\n")
+        profiles = provider.search_profiles(search, max_results=max_results, scraper_mode=mode)
+
+        if not profiles:
+            click.echo("No profiles found.")
+            return
+
+        click.echo(f"Found {len(profiles)} profiles:\n")
+        for p in profiles:
+            click.echo(f"  {p.name or 'Unknown'}")
+            click.echo(f"    {p.headline or 'No headline'}")
+            click.echo(f"    {p.url}")
+            click.echo()
+
+    elif profile:
+        click.echo(f"Scraping profile: {profile}\n")
+        p = provider.scrape_profile(profile)
+
+        if not p:
+            click.echo("Could not scrape profile.", err=True)
+            sys.exit(1)
+
+        click.echo(f"Name:       {p.name}")
+        click.echo(f"Headline:   {p.headline}")
+        click.echo(f"Location:   {p.location}")
+        click.echo(f"Company:    {p.current_company}")
+        click.echo(f"Title:      {p.current_title}")
+        click.echo(f"School:     {p.school}")
+        click.echo(f"Degree:     {p.degree}")
+        click.echo(f"Years exp:  {p.years_experience}")
+        click.echo(f"Email:      {p.email}")
+
+    else:
+        click.echo("Usage:")
+        click.echo("  shoudao linkedin --search 'software engineer AI'")
+        click.echo("  shoudao linkedin --profile 'https://linkedin.com/in/someone'")
 
 
 # =============================================================================
