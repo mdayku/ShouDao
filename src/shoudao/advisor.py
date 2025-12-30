@@ -52,12 +52,13 @@ If no product context is provided, focus on the lead's industry needs.
 class Advisor:
     """LLM-based outreach advisor."""
 
-    def __init__(self, api_key: str | None = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set")
         self.client = OpenAI(api_key=self.api_key)
-        self.model = model
+        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-4o-mini
+        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
 
     def generate_advice(
         self,

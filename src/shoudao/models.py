@@ -183,6 +183,15 @@ class Lead(BaseModel):
     advice: ApproachAdvice | None = Field(default=None)
     dedupe_key: str | None = Field(default=None, description="Normalized key for deduplication")
 
+    # Source tracking
+    extracted_from_url: str | None = Field(
+        default=None, description="The URL that produced this lead"
+    )
+    domain_aligned: bool = Field(
+        default=True, description="Whether org domain matches source domain"
+    )
+    needs_review: bool = Field(default=False, description="Flagged for manual review")
+
     # Query context
     query_context: str | None = Field(
         default=None, description="The prompt that generated this lead"

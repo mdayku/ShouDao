@@ -34,6 +34,9 @@ CSV_COLUMNS = [
     "evidence_snippets",
     "confidence",
     "dedupe_key",
+    "extracted_from_url",
+    "domain_aligned",
+    "needs_review",
     # Approach Advice
     "recommended_angle",
     "recommended_first_offer",
@@ -92,6 +95,9 @@ def lead_to_row(lead: Lead) -> dict:
         "evidence_snippets": " | ".join(evidence_snippets[:3]),
         "confidence": f"{lead.confidence:.2f}",
         "dedupe_key": lead.dedupe_key or "",
+        "extracted_from_url": lead.extracted_from_url or "",
+        "domain_aligned": "yes" if lead.domain_aligned else "no",
+        "needs_review": "yes" if lead.needs_review else "no",
         # Advice
         "recommended_angle": lead.advice.recommended_angle if lead.advice else "",
         "recommended_first_offer": lead.advice.recommended_first_offer if lead.advice else "",

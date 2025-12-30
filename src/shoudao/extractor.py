@@ -111,12 +111,13 @@ Page content:
 class Extractor:
     """LLM-based lead extractor using OpenAI structured outputs."""
 
-    def __init__(self, api_key: str | None = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set")
         self.client = OpenAI(api_key=self.api_key)
-        self.model = model
+        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-4o-mini
+        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
 
     def extract(self, fetch_result: FetchResult, prompt: str) -> ExtractionResult:
         """Extract leads from a fetched page."""
@@ -216,12 +217,31 @@ class Extractor:
                 evidence=[evidence],
             )
 
+            # Check domain alignment between org website and source URL
+            source_domain = _normalize_domain(source_url)
+            org_domain = _normalize_domain(normalized_website) if normalized_website else None
+
+            # Domain alignment check:
+            # - If org has no website, assume it came from the source (aligned)
+            # - If org domain matches source domain, aligned
+            # - If org domain differs from source domain, misaligned (needs review)
+            domain_aligned = True
+            needs_review = False
+
+            if org_domain and org_domain != source_domain:
+                # Different domains - this might be a directory page or misattribution
+                domain_aligned = False
+                needs_review = True
+
             # Build lead
             lead = Lead(
                 organization=organization,
                 contacts=contacts,
                 evidence=[evidence],
                 dedupe_key=_normalize_domain(normalized_website or source_url),
+                extracted_from_url=source_url,
+                domain_aligned=domain_aligned,
+                needs_review=needs_review,
             )
 
             # Fail-closed at lead level: must have evidence-backed org OR usable contact

@@ -154,7 +154,11 @@ def score_lead(lead: Lead) -> float:
     if lead.organization.description:
         score += 0.10
 
-    return min(score, 1.0)
+    # PENALTY: -0.30 if domain not aligned (extracted from different domain than org website)
+    if not lead.domain_aligned:
+        score -= 0.30
+
+    return max(min(score, 1.0), 0.0)  # Clamp to 0-1
 
 
 def score_all_leads(leads: list[Lead]) -> list[Lead]:
