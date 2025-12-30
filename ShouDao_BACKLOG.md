@@ -240,6 +240,49 @@ Benefits of migration:
 
 ---
 
+## Epic 14 — Recall Improvements (P0) 🆕
+
+Goal: Get from 57 leads to 100+ while maintaining quality.
+
+### Story 14.1 — Tiered Buyer Classification
+Replace hard buyer gate with tiered scoring.
+
+- [ ] Task 14.1.1: Add `buyer_tier` field to Lead model (A/B/C)
+- [ ] Task 14.1.2: Add `buyer_likelihood` score (0-1)
+- [ ] Task 14.1.3: Keep uncertain buyers as Tier B/C instead of dropping
+- [ ] Task 14.1.4: Add tier breakdown to report.md
+
+Tier definitions:
+- **Tier A**: Caribbean-based, clear buyer type (distributor/installer/contractor)
+- **Tier B**: Caribbean-based, unclear type OR weak website
+- **Tier C**: Related industry, potential buyer, needs verification
+
+### Story 14.2 — Contractor/Builder Expansion
+Add queries to find builders who use windows/doors (not just sell them).
+
+- [ ] Task 14.2.1: Add expansion queries: "construction companies [island]"
+- [ ] Task 14.2.2: Add expansion queries: "general contractor hotel [island]"
+- [ ] Task 14.2.3: Add expansion queries: "aluminum works [island]"
+- [ ] Task 14.2.4: Add expansion queries: "building contractor commercial [island]"
+
+### Story 14.3 — Directory Harvesting
+Increase directory/list page discovery.
+
+- [ ] Task 14.3.1: Add chamber of commerce directory queries
+- [ ] Task 14.3.2: Add trade association member list queries
+- [ ] Task 14.3.3: Add "top contractors [island]" queries
+- [ ] Task 14.3.4: Increase page fetch limit for directory pages
+
+### Story 14.4 — Logging & Observability
+Add structured logging for long runs.
+
+- [ ] Task 14.4.1: Add phase logs (Step 1/6, etc.) ✅ Done
+- [ ] Task 14.4.2: Add country/language progress logs
+- [ ] Task 14.4.3: Add heartbeat logs for long waits
+- [ ] Task 14.4.4: Log dropped leads with reason
+
+---
+
 ## Epic 13 — Data Source Expansion (P1) 🆕
 
 ### Story 13.1 — LinkedIn Integration

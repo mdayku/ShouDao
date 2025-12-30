@@ -219,60 +219,96 @@ def has_exporter_signals(lead: Lead) -> bool:
     return False
 
 
+def classify_buyer_tier(lead: Lead) -> tuple[str, float]:
+    """
+    Classify a lead into buyer tiers with likelihood score.
+
+    Returns:
+        (tier, likelihood) where tier is A/B/C/excluded
+    """
+    country = lead.organization.country
+    org_type = lead.organization.org_type
+    is_caribbean = is_caribbean_country(country)
+    is_exporter = has_exporter_signals(lead)
+
+    likelihood = 0.5  # Start neutral
+
+    # Exporter signals are very negative
+    if is_exporter:
+        likelihood -= 0.3
+
+    # Caribbean location is very positive
+    if is_caribbean:
+        likelihood += 0.3
+
+    # Buyer-friendly org types are positive
+    if org_type in BUYER_ORG_TYPES:
+        likelihood += 0.2
+
+    # Manufacturers are neutral unless clearly local
+    if org_type in MANUFACTURER_TYPES:
+        if is_caribbean:
+            likelihood += 0.1  # Local manufacturer is OK
+        else:
+            likelihood -= 0.1  # Foreign manufacturer is suspicious
+
+    # Unknown country is slightly negative
+    if not country or country.lower() in {"unknown", ""}:
+        likelihood -= 0.1
+
+    # Clamp to 0-1
+    likelihood = max(0.0, min(1.0, likelihood))
+
+    # Determine tier based on likelihood and flags
+    if is_exporter and not is_caribbean:
+        tier = "excluded"
+    elif likelihood >= 0.7:
+        tier = "A"
+    elif likelihood >= 0.4:
+        tier = "B"
+    elif likelihood >= 0.2:
+        tier = "C"
+    else:
+        tier = "excluded"
+
+    return tier, likelihood
+
+
 def apply_buyer_gate(leads: list[Lead]) -> list[Lead]:
     """
-    Apply buyer-only role gate.
+    Apply tiered buyer classification.
 
-    KEEP: Caribbean-based distributors, installers, contractors, suppliers
-    FLAG: Manufacturers (unless clearly local)
-    DROP: Foreign exporters, international brands
+    Instead of dropping leads, classify them into tiers:
+    - Tier A: High confidence buyers (keep)
+    - Tier B: Probable buyers (keep, may need review)
+    - Tier C: Needs verification (keep, flagged for review)
+    - Excluded: Non-buyers (drop)
 
-    Returns filtered list with needs_review flags set appropriately.
+    Returns list with only excluded leads removed.
     """
     filtered = []
+    tier_counts = {"A": 0, "B": 0, "C": 0, "excluded": 0}
 
     for lead in leads:
-        country = lead.organization.country
-        org_type = lead.organization.org_type
-        is_caribbean = is_caribbean_country(country)
-        is_exporter = has_exporter_signals(lead)
+        tier, likelihood = classify_buyer_tier(lead)
+        lead.buyer_tier = tier
+        lead.buyer_likelihood = likelihood
 
-        # Always drop if clearly an exporter
-        if is_exporter and not is_caribbean:
-            continue  # Drop
+        # Flag Tier B and C for review
+        if tier in ("B", "C"):
+            lead.needs_review = True
 
-        # Keep Caribbean-based buyers
-        if is_caribbean and org_type in BUYER_ORG_TYPES:
+        tier_counts[tier] += 1
+
+        # Only exclude the clearly non-buyers
+        if tier != "excluded":
             filtered.append(lead)
-            continue
 
-        # Manufacturers need extra scrutiny
-        if org_type in MANUFACTURER_TYPES:
-            if is_caribbean:
-                # Local manufacturer is OK, but flag for review
-                lead.needs_review = True
-                filtered.append(lead)
-            elif is_exporter:
-                continue  # Drop foreign exporters
-            else:
-                # Unknown - flag for review
-                lead.needs_review = True
-                filtered.append(lead)
-            continue
-
-        # Non-Caribbean unknown types
-        if not is_caribbean:
-            if country and country.lower() not in {"unknown", ""}:
-                # Has a country but not Caribbean - drop
-                continue
-            else:
-                # Unknown country - flag for review
-                lead.needs_review = True
-                filtered.append(lead)
-            continue
-
-        # Everything else: keep but may flag
-        filtered.append(lead)
+    # Log tier distribution
+    print(
+        f"  Tier distribution: A={tier_counts['A']}, B={tier_counts['B']}, "
+        f"C={tier_counts['C']}, excluded={tier_counts['excluded']}"
+    )
 
     return filtered
 

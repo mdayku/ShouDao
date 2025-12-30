@@ -192,6 +192,15 @@ class Lead(BaseModel):
     )
     needs_review: bool = Field(default=False, description="Flagged for manual review")
 
+    # Buyer classification (tiered instead of binary)
+    buyer_tier: Literal["A", "B", "C", "excluded"] = Field(
+        default="B",
+        description="A=high confidence buyer, B=probable buyer, C=needs verification, excluded=non-buyer",
+    )
+    buyer_likelihood: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Likelihood this is a real buyer (0-1)"
+    )
+
     # Query context
     query_context: str | None = Field(
         default=None, description="The prompt that generated this lead"

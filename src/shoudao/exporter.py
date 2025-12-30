@@ -54,6 +54,8 @@ CSV_COLUMNS = [
     "extracted_from_url",
     "domain_aligned",
     "needs_review",
+    "buyer_tier",
+    "buyer_likelihood",
     # Approach Advice
     "recommended_angle",
     "recommended_first_offer",
@@ -135,6 +137,8 @@ def lead_to_row(lead: Lead) -> dict:
         "extracted_from_url": lead.extracted_from_url or "",
         "domain_aligned": "yes" if lead.domain_aligned else "no",
         "needs_review": "yes" if lead.needs_review else "no",
+        "buyer_tier": lead.buyer_tier,
+        "buyer_likelihood": f"{lead.buyer_likelihood:.2f}",
         # Advice
         "recommended_angle": lead.advice.recommended_angle if lead.advice else "",
         "recommended_first_offer": lead.advice.recommended_first_offer if lead.advice else "",

@@ -209,4 +209,19 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
                     org_type = pack["types"][0]  # Primary type
                     queries.append(f"{product} {org_type} {country}")
 
+        # Add contractor/builder expansion queries (these are BUYERS, not sellers)
+        # These catch companies that USE windows/doors, not just sell them
+        top_markets = [
+            "Jamaica",
+            "Puerto Rico",
+            "Dominican Republic",
+            "Trinidad and Tobago",
+            "Bahamas",
+            "Barbados",
+        ]
+        for market in top_markets:
+            queries.append(f"construction company hotel resort {market}")
+            queries.append(f"general contractor commercial {market}")
+            queries.append(f"building contractor {market}")
+
     return queries
