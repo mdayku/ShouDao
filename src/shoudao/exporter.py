@@ -6,8 +6,25 @@ import csv
 import json
 from pathlib import Path
 from typing import TextIO
+from urllib.parse import urlparse
 
 from .models import Lead, RunResult
+
+
+def _extract_root_domain(url: str) -> str:
+    """Extract root domain from URL (e.g., https://foo.example.com/bar → example.com)."""
+    try:
+        parsed = urlparse(url)
+        netloc = parsed.netloc or parsed.path.split("/")[0]
+        # Remove port if present
+        netloc = netloc.split(":")[0]
+        # Remove www prefix
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        return netloc
+    except Exception:
+        return ""
+
 
 # CSV column order (stable schema - derived from Lead model)
 CSV_COLUMNS = [
@@ -45,7 +62,7 @@ CSV_COLUMNS = [
 
 
 def lead_to_row(lead: Lead) -> dict:
-    """Convert a Lead to a flat CSV row dict."""
+    """Convert a Lead to a flat CSV row dict with fallback logic for blank fields."""
     contact = lead.get_primary_contact()
 
     # Extract channels by type
@@ -71,15 +88,35 @@ def lead_to_row(lead: Lead) -> dict:
         if e.snippet:
             evidence_snippets.append(e.snippet)
 
+    # === FALLBACK LOGIC ===
+    # Website: if blank, derive from evidence URL or extracted_from_url
+    website = str(lead.organization.website) if lead.organization.website else ""
+    if not website:
+        # Try to derive from extracted_from_url first (most reliable)
+        if lead.extracted_from_url:
+            website = f"https://{_extract_root_domain(lead.extracted_from_url)}"
+        # Otherwise try first evidence URL
+        elif evidence_urls:
+            website = f"https://{_extract_root_domain(evidence_urls[0])}"
+
+    # Contact page: if blank but we have extracted_from_url, use that
+    if not contact_page and lead.extracted_from_url:
+        contact_page = lead.extracted_from_url
+
+    # Country: normalize "Unknown" to empty for cleaner CSV
+    country = lead.organization.country or ""
+    if country.lower() == "unknown":
+        country = ""
+
     return {
         # Organization
         "organization_name": lead.organization.name,
         "org_type": lead.organization.org_type,
         "industries": ";".join(lead.organization.industries),
-        "country": lead.organization.country or "",
+        "country": country,
         "region": lead.organization.region or "",
         "city": lead.organization.city or "",
-        "website": str(lead.organization.website) if lead.organization.website else "",
+        "website": website,
         "size_indicator": lead.organization.size_indicator or "",
         "description": lead.organization.description or "",
         # Contact
