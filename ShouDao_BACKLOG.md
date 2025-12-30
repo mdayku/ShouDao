@@ -256,21 +256,39 @@ Benefits of migration:
 ## Session Log
 
 ### 2025-12-29 Session 2
-**Commits:** 307906d
+**Commits:** 307906d → f2423d6
 
 **Built:**
 - Source-lead validity gate (domain alignment check)
 - `extracted_from_url` field on Lead model
 - `domain_aligned` and `needs_review` flags
 - Configurable LLM model via `SHOUDAO_MODEL` env var
+- **Directory page classifier** (directory/company_site/article/other)
+- **1-page-1-company guardrail** for non-directory pages
+- **Multilingual query expansion** with country → language mapping
+- Keyword packs for Spanish, French, Dutch
+
+**Best Run: 91 leads from 51 domains**
+| Metric | Value |
+|--------|-------|
+| Total Leads | 91 |
+| Sources | 54 |
+| Domains | 51 |
+| Queries Generated | 29 |
+| Time | ~9 minutes |
+| Puerto Rico (ES) | 22 leads |
+| Guadeloupe (FR) | 3 leads |
+
+**Guardrails working:**
+```
+[Guardrail] https://www.artisanwindowsanddoors.com/: page_type=company_site, limiting from 2 to 1 lead
+[Guardrail] https://www.martiniquemenuiseries.fr/: page_type=company_site, limiting from 2 to 1 lead
+```
 
 **Added to CSV:**
 - `extracted_from_url` — the URL that produced this lead
 - `domain_aligned` — yes/no if org domain matches source domain
 - `needs_review` — flagged for manual review if misaligned
-
-**Scoring changes:**
-- -0.30 confidence penalty for domain-misaligned leads
 
 **Documented:**
 - GPT-5.x migration path (Story 12.2)
