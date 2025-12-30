@@ -11,13 +11,21 @@
 
 ## Configuration
 
-| Setting | Value | Location |
-|---------|-------|----------|
-| Extraction model | gpt-4o-mini | `extractor.py` |
-| Advice model | gpt-4o-mini | `advisor.py` |
-| Search provider | Serper.dev | `search.py` |
-| Rate limit | 1.5s between requests | `fetcher.py` |
-| Max pages per run | 30 | `pipeline.py` |
+| Setting | Value | Env Var | Location |
+|---------|-------|---------|----------|
+| LLM model | gpt-4o-mini (default) | `SHOUDAO_MODEL` | `extractor.py`, `advisor.py` |
+| Search provider | Serper.dev | `SERPER_API_KEY` | `search.py` |
+| Rate limit | 1.5s between requests | — | `fetcher.py` |
+| Max pages per run | 30 | — | `pipeline.py` |
+
+### Model Compatibility Notes
+
+| Model | Status | Notes |
+|-------|--------|-------|
+| `gpt-4o-mini` | ✅ Supported | Default, cost-effective |
+| `gpt-4o` | ✅ Supported | Higher quality extraction |
+| `gpt-5.2` | ⚠️ Requires migration | Needs Responses API (see Epic 12) |
+| `gpt-5-mini` | ⚠️ Requires migration | Needs Responses API |
 
 ---
 
@@ -204,15 +212,31 @@
 
 ## Epic 12 — Model Configuration (P1) 🆕
 
-### Story 12.1 — Model selection
-- [ ] Task 12.1.1: Make extraction model configurable (env var or CLI flag)
-- [ ] Task 12.1.2: Make advice model configurable
+### Story 12.1 — Model selection ✅ DONE
+- [x] Task 12.1.1: Make extraction model configurable (`SHOUDAO_MODEL` env var)
+- [x] Task 12.1.2: Make advice model configurable (same env var)
 - [ ] Task 12.1.3: Add model cost tracking per run
 
-### Story 12.2 — Deep research mode (future)
-- [ ] Task 12.2.1: Define guardrails for deep research prompts
-- [ ] Task 12.2.2: Integrate Perplexity API as alternative search provider
-- [ ] Task 12.2.3: Multi-iteration search + synthesis pipeline
+### Story 12.2 — GPT-5.x / Responses API Migration (P2)
+OpenAI's new GPT-5.x models require the **Responses API** instead of Chat Completions.
+
+Key changes needed:
+- [ ] Task 12.2.1: Migrate `extractor.py` from `client.chat.completions.parse()` to `client.responses.create()`
+- [ ] Task 12.2.2: Migrate `advisor.py` to Responses API
+- [ ] Task 12.2.3: Handle chain-of-thought passing via `previous_response_id`
+- [ ] Task 12.2.4: Update structured output to use CFG grammars (if needed)
+- [ ] Task 12.2.5: Test with `gpt-5.2` and `gpt-5-mini`
+
+Benefits of migration:
+- Better intelligence (CoT passing between turns)
+- Fewer reasoning tokens, lower latency
+- Higher cache hit rates
+- Access to new `reasoning.effort` and `verbosity` parameters
+
+### Story 12.3 — Deep research mode (future)
+- [ ] Task 12.3.1: Define guardrails for deep research prompts
+- [ ] Task 12.3.2: Integrate Perplexity API as alternative search provider
+- [ ] Task 12.3.3: Multi-iteration search + synthesis pipeline
 
 ---
 
@@ -230,6 +254,29 @@
 ---
 
 ## Session Log
+
+### 2025-12-29 Session 2
+**Commits:** 307906d
+
+**Built:**
+- Source-lead validity gate (domain alignment check)
+- `extracted_from_url` field on Lead model
+- `domain_aligned` and `needs_review` flags
+- Configurable LLM model via `SHOUDAO_MODEL` env var
+
+**Added to CSV:**
+- `extracted_from_url` — the URL that produced this lead
+- `domain_aligned` — yes/no if org domain matches source domain
+- `needs_review` — flagged for manual review if misaligned
+
+**Scoring changes:**
+- -0.30 confidence penalty for domain-misaligned leads
+
+**Documented:**
+- GPT-5.x migration path (Story 12.2)
+- Model compatibility table
+
+---
 
 ### 2025-12-29 Session 1
 **Commits:** 5 (281de5a → bae49b2)
