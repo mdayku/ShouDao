@@ -29,6 +29,9 @@ dev = [
     "pytest-cov>=4.1.0",
     "ruff>=0.1.9",
     "pre-commit>=3.6.0",
+    "mypy>=1.8.0",
+    "types-requests>=2.31.0",
+    "types-PyYAML>=6.0.0",
 ]
 
 [project.scripts]
@@ -62,3 +65,26 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+warn_unused_ignores = false
+ignore_missing_imports = true
+strict = false
+# Exclude problematic files for now - tighten over time
+exclude = [
+    "src/shoudao/logger\\.py",
+    "src/shoudao/fetcher\\.py",
+    "src/shoudao/linkedin\\.py",
+    "src/shoudao/extractor\\.py",
+    "src/shoudao/advisor\\.py",
+    "src/shoudao/pipeline\\.py",
+    "src/shoudao/cli\\.py",
+    "src/shoudao/parallel\\.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["shoudao.*"]
+disallow_untyped_defs = false
+check_untyped_defs = false

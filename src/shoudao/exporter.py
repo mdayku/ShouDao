@@ -279,7 +279,7 @@ def generate_report(result: RunResult, output: Path) -> None:
         "C": "Needs verification",
         "excluded": "Non-buyer (dropped)",
     }
-    for tier in ["A", "B", "C", "excluded"]:
+    for tier in ["A", "B", "C", "excluded"]:  # type: ignore[assignment]
         count = by_tier.get(tier, 0)
         desc = tier_descriptions.get(tier, "")
         report += f"| {tier} | {desc} | {count} |\n"

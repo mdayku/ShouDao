@@ -53,9 +53,10 @@ class SerperProvider(SearchProvider):
     """Serper.dev search API provider with retry logic."""
 
     def __init__(self, api_key: str | None = None):
-        self.api_key = api_key or os.getenv("SERPER_API_KEY")
-        if not self.api_key:
+        resolved_key = api_key or os.getenv("SERPER_API_KEY")
+        if not resolved_key:
             raise ValueError("SERPER_API_KEY not set")
+        self.api_key: str = resolved_key
         self.base_url = "https://google.serper.dev/search"
         self._last_request_time: float = 0
         self._min_request_interval: float = 0.5  # 500ms between requests

@@ -354,7 +354,7 @@ def apply_buyer_gate(leads: list[Lead]) -> list[Lead]:
 
     for lead in leads:
         tier, likelihood = classify_buyer_tier(lead)
-        lead.buyer_tier = tier
+        lead.buyer_tier = tier  # type: ignore[assignment]
         lead.buyer_likelihood = likelihood
 
         # Flag Tier B and C for review
