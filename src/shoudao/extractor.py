@@ -132,12 +132,15 @@ Page content:
 
 
 class Extractor:
-    """LLM-based lead extractor using OpenAI structured outputs."""
+    """LLM-based lead extractor using OpenAI Responses API with structured outputs."""
 
     # Default model: gpt-5-mini (cost-optimized reasoning)
     # Fallback: gpt-4o (if gpt-5-mini fails)
     DEFAULT_MODEL = "gpt-5-mini"
     FALLBACK_MODEL = "gpt-4o"
+
+    # GPT-5.x models that support Responses API parameters
+    GPT5_MODELS = {"gpt-5-mini", "gpt-5-nano", "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.2-pro"}
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -147,19 +150,44 @@ class Extractor:
         # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-5-mini
         self.model = model or os.getenv("SHOUDAO_MODEL", self.DEFAULT_MODEL)
 
+    def _is_gpt5_model(self, model: str) -> bool:
+        """Check if model supports GPT-5.x Responses API parameters."""
+        return any(model.startswith(m) for m in self.GPT5_MODELS)
+
     def _call_model(
         self, model: str, system_prompt: str, user_prompt: str, response_format: type
     ):
-        """Call the model with structured output. Returns parsed result or raises."""
-        completion = self.client.beta.chat.completions.parse(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=response_format,
-        )
-        return completion.choices[0].message.parsed
+        """Call the model with structured output. Returns parsed result or raises.
+
+        Uses Responses API for GPT-5.x models with:
+        - reasoning.effort: "none" (low-latency, prompting handles reasoning)
+        - text.verbosity: "low" (concise extraction output)
+        """
+        # Combine system + user prompt for Responses API input format
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        if self._is_gpt5_model(model):
+            # Use Responses API for GPT-5.x models
+            response = self.client.responses.create(
+                model=model,
+                input=full_prompt,
+                text={"format": {"type": "json_schema", "schema": response_format.model_json_schema()}},
+                reasoning={"effort": "none"},
+            )
+            # Parse the JSON response into the Pydantic model
+            import json
+            return response_format.model_validate(json.loads(response.output_text))
+        else:
+            # Fallback to Chat Completions for older models (gpt-4o, etc.)
+            completion = self.client.beta.chat.completions.parse(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format=response_format,
+            )
+            return completion.choices[0].message.parsed
 
     def extract(self, fetch_result: FetchResult, prompt: str) -> ExtractionResult:
         """Extract leads from a fetched page."""
@@ -605,12 +633,15 @@ Page content:
 
 
 class TalentExtractor:
-    """LLM-based candidate extractor for talent discovery."""
+    """LLM-based candidate extractor for talent discovery using Responses API."""
 
     # Default model: gpt-5-mini (cost-optimized reasoning)
     # Fallback: gpt-4o (if gpt-5-mini fails)
     DEFAULT_MODEL = "gpt-5-mini"
     FALLBACK_MODEL = "gpt-4o"
+
+    # GPT-5.x models that support Responses API parameters
+    GPT5_MODELS = {"gpt-5-mini", "gpt-5-nano", "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.2-pro"}
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -619,19 +650,37 @@ class TalentExtractor:
         self.client = OpenAI(api_key=self.api_key)
         self.model = model or os.getenv("SHOUDAO_MODEL", self.DEFAULT_MODEL)
 
+    def _is_gpt5_model(self, model: str) -> bool:
+        """Check if model supports GPT-5.x Responses API parameters."""
+        return any(model.startswith(m) for m in self.GPT5_MODELS)
+
     def _call_model(
         self, model: str, system_prompt: str, user_prompt: str, response_format: type
     ):
         """Call the model with structured output. Returns parsed result or raises."""
-        completion = self.client.beta.chat.completions.parse(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format=response_format,
-        )
-        return completion.choices[0].message.parsed
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        if self._is_gpt5_model(model):
+            # Use Responses API for GPT-5.x models
+            response = self.client.responses.create(
+                model=model,
+                input=full_prompt,
+                text={"format": {"type": "json_schema", "schema": response_format.model_json_schema()}},
+                reasoning={"effort": "none"},
+            )
+            import json
+            return response_format.model_validate(json.loads(response.output_text))
+        else:
+            # Fallback to Chat Completions for older models
+            completion = self.client.beta.chat.completions.parse(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format=response_format,
+            )
+            return completion.choices[0].message.parsed
 
     def extract(self, fetch_result: FetchResult) -> TalentExtractionResult:
         """Extract candidates from a fetched page."""

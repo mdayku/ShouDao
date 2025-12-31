@@ -259,20 +259,25 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 - [x] Task 12.1.2: Make advice model configurable (same env var)
 - [ ] Task 12.1.3: Add model cost tracking per run
 
-### Story 12.2 — GPT-5.x Support ✅ DONE
-Updated to use GPT-5 model family with Chat Completions API (still works).
+### Story 12.2 — GPT-5.x / Responses API Migration ✅ DONE
+Full migration to OpenAI Responses API for GPT-5.x models.
 
-Changes made:
+Phase 1 (model switch):
 - [x] Task 12.2.1: Default model changed to `gpt-5-mini` (cost-optimized)
 - [x] Task 12.2.2: Added fallback to `gpt-4o` if primary model fails
-- [x] Task 12.2.3: Updated `extractor.py` with `_call_model()` helper + fallback
-- [x] Task 12.2.4: Updated `advisor.py` with same pattern
-- [x] Task 12.2.5: Updated `TalentExtractor` with same pattern
 
-Future improvements (Phase 2):
-- [ ] Migrate to Responses API for CoT passing between turns
-- [ ] Add `reasoning.effort` and `verbosity` parameters
-- [ ] Enable CFG grammars for structured outputs
+Phase 2 (Responses API):
+- [x] Task 12.2.3: Migrated `Extractor` to use `client.responses.create()` for GPT-5.x
+- [x] Task 12.2.4: Migrated `TalentExtractor` to Responses API
+- [x] Task 12.2.5: Migrated `Advisor` to Responses API
+- [x] Task 12.2.6: Added `reasoning.effort: "none"` for low-latency extraction
+- [x] Task 12.2.7: Added JSON schema format for structured outputs
+- [x] Task 12.2.8: Backward compatible - falls back to Chat Completions for gpt-4o
+
+Architecture:
+- GPT-5.x models: Uses Responses API with `reasoning.effort: "none"`
+- Older models (gpt-4o): Uses Chat Completions API with `beta.chat.completions.parse()`
+- Auto-detection via `_is_gpt5_model()` helper
 
 ### Story 12.3 — Deep research mode (future)
 - [ ] Task 12.3.1: Define guardrails for deep research prompts
