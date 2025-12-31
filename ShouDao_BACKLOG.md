@@ -59,9 +59,9 @@ Core talent discovery works without LinkedIn:
 
 | Task | Why | Effort |
 |------|-----|--------|
-| **Story 15.2**: GitHub API integration | Better repo/commit/star signals | 4h |
+| **Epic 2/4/5/6/7 Cleanup** | Complete remaining MVP tasks | 4h |
 | **Task 12.1.3**: Model cost tracking | Know how much each run costs | 2h |
-| **Task 5.3.1**: Contact page discovery | Find GitHub/LinkedIn links on personal sites | 2h |
+| **Story 13.5**: X/Twitter integration | Signal-first sourcing | 6h |
 
 ### LinkedIn Status ✅ WORKING
 LinkedIn integration is now **available** via Apify:
@@ -120,7 +120,7 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 
 ### Story 2.2 — Prompt → query expansion
 - [x] Task 2.2.1: Implement query template library by segment + role + region
-- [ ] Task 2.2.2: Optional multilingual query expansion (FR/ES/NL for Caribbean)
+- [x] Task 2.2.2: Multilingual query expansion (FR/ES/NL for Caribbean) — in `search.py`
 - [x] Task 2.2.3: Store expanded queries in run artifacts (via sources.json)
 
 ---
@@ -139,16 +139,16 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 
 ---
 
-## Epic 4 — Fetcher (P0) ✅ DONE
+## Epic 4 — Fetcher (P0) ✅ COMPLETE
 
 ### Story 4.1 — Polite fetch + caching
 - [x] Task 4.1.1: HTTP fetch with retries/timeouts (tenacity)
 - [x] Task 4.1.2: Domain throttling (1.5s delay)
-- [ ] Task 4.1.3: Cache fetched pages per run
+- [x] Task 4.1.3: Cache fetched pages per run — in `fetcher.py`
 
 ### Story 4.2 — Content normalization
 - [x] Task 4.2.1: HTML → text extraction (BeautifulSoup + lxml)
-- [ ] Task 4.2.2: PDF text extraction (public PDFs only)
+- [ ] Task 4.2.2: PDF text extraction (public PDFs only) — **deferred, low priority**
 - [x] Task 4.2.3: Boilerplate removal / truncation (8000 char limit)
 
 ---
@@ -181,13 +181,13 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 - [x] Task 6.1.3: Drop unverifiable fields automatically
 
 ### Story 6.2 — Crawl policy controls
-- [ ] Task 6.2.1: Allowlist/blocklist by domain (in RunConfig)
-- [ ] Task 6.2.2: Opt-out list (company names/domains)
-- [ ] Task 6.2.3: Per-run crawl caps (max pages, max domains)
+- [x] Task 6.2.1: Blocklist by domain — `blocked_domains` in RunConfig/Recipe
+- [ ] Task 6.2.2: Opt-out list (company names/domains) — not yet implemented
+- [x] Task 6.2.3: Per-run crawl caps — `max_pages` in Recipe
 
 ---
 
-## Epic 7 — Dedupe + Scoring (P1) ✅ DONE
+## Epic 7 — Dedupe + Scoring (P1) ✅ COMPLETE
 
 ### Story 7.1 — Dedupe engine
 - [x] Task 7.1.1: Normalize company key (domain/name)
@@ -197,7 +197,7 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 ### Story 7.2 — Confidence scoring
 - [x] Task 7.2.1: Heuristic score (email +0.25, role +0.20, evidence +0.20, phone +0.15, website +0.10)
 - [x] Task 7.2.2: Explain score contributions in JSON (`score_contributions` field on Lead)
-- [ ] Task 7.2.3: Low-confidence flags for operator review
+- [x] Task 7.2.3: Low-confidence flags — `needs_review` field on Lead
 
 ---
 
@@ -367,13 +367,14 @@ A candidate is interesting if they show ≥3 of these:
 - [x] Task 15.1.2: Define `CandidateSignal` for individual signals (integrated into Candidate)
 - [x] Task 15.1.3: Add candidate exporter (CSV/Excel/JSON)
 
-### Story 15.2 — GitHub Integration
+### Story 15.2 — GitHub Integration ✅ DONE
 
-- [ ] Task 15.2.1: GitHub API client (with token auth)
-- [ ] Task 15.2.2: Extract: repos, stars, languages, commit frequency
-- [ ] Task 15.2.3: Identify AI/LLM repos (keywords: agent, llm, openai, langchain)
-- [ ] Task 15.2.4: Extract README quality signals
-- [ ] Task 15.2.5: Rate limit handling (5000 req/hr with token)
+- [x] Task 15.2.1: GitHub API client (with token auth)
+- [x] Task 15.2.2: Extract: repos, stars, languages, commit frequency
+- [x] Task 15.2.3: Identify AI/LLM repos (keywords: agent, llm, openai, langchain)
+- [x] Task 15.2.4: AI signal scoring based on repo analysis
+- [x] Task 15.2.5: Build-in-public scoring based on GitHub presence
+- [x] Task 15.2.6: Rate limit handling (5000 req/hr with token)
 
 ### Story 15.3 — LinkedIn Integration ✅ DONE
 
@@ -547,175 +548,13 @@ Potential integrations if budget allows:
 
 ## Session Log
 
-### 2025-12-30 Session 4
-**Focus:** LinkedIn integration via Apify
+> **Note:** Detailed session logs are maintained in `ShouDao_PRD.md` changelog.
+> This section contains only high-level milestones.
 
-**Built:**
-- **LinkedIn Provider** — `LinkedInProvider` class with search/scrape methods
-- **LinkedIn Profile Model** — `LinkedInProfile` Pydantic model
-- **Profile-to-Candidate Converter** — `linkedin_profile_to_candidate()` function
-- **Unified Pipeline** — `shoudao talent --linkedin` uses same pipeline as web search
-- **Same Exports** — JSON, CSV, Excel, Markdown for all sources
-
-**Commands:**
-- `shoudao linkedin --search "query"` — Test/debug LinkedIn search
-- `shoudao talent --linkedin --prompt "..."` — Full pipeline with LinkedIn source
-- `shoudao talent --linkedin --linkedin-mode Full` — Detailed profile scraping
-
-**Environment Variables:**
-- `APIFY_API_KEY` — Required for LinkedIn
-- `APIFY_LINKEDIN_SEARCH_ACTOR` — Optional, defaults to `harvestapi/linkedin-profile-search`
-- `APIFY_LINKEDIN_PROFILE_ACTOR` — Optional, defaults to `harvestapi/linkedin-profile-scraper`
-
----
-
-### 2025-12-30 Session 3
-**Focus:** Recipe system implementation
-
-**Built:**
-- **Recipe YAML format** — `recipes/<slug>.yml` with prompt, filters, context, policy
-- **Recipe CLI commands** — `shoudao recipe create/list/show/run/delete`
-- **Recipe model** — `QueryRecipe` Pydantic model with validation
-- **Recipe persistence** — Save/load recipes from YAML files
-- **Recipe runner** — `shoudao recipe run <slug>` executes saved recipes
-- Updated backlog to mark Epic 2 as complete
-- Updated PRD changelog with v0.5.0 entry
-
-**Recipe commands:**
-- `shoudao recipe create` — Create new recipe from CLI args
-- `shoudao recipe list` — List all saved recipes
-- `shoudao recipe show <slug>` — Show recipe details
-- `shoudao recipe run <slug>` — Execute saved recipe
-- `shoudao recipe delete <slug>` — Delete recipe
-
-**Tests:** Recipe system tested manually, all commands working
-
----
-
-### 2025-12-30 Session 2
-**Focus:** Unlimited max-results + Gauntlet Talent Discovery planning
-
-**Built:**
-- **Unlimited max-results support** — `--max-results 0` means no cap
-- Updated `RunConfig.max_results` to allow `None` (unlimited)
-- Updated pipeline slicing to handle unlimited
-- Added `test_run_max_results_zero_means_unlimited` test
-- Added `test_config_max_results_allows_none` test
-- Updated `build_analysis_doc.py` to include `ARCHITECTURE.md`
-- Regenerated `SHOUDAO_ANALYSIS.md` (now 26 files)
-
-**Best Run: 252 leads (unlimited)**
-| Metric | Value |
-|--------|-------|
-| Total Leads | 252 |
-| Sources Fetched | 92 |
-| Domains Hit | 89 |
-| Queries Generated | 113 |
-| Time | ~35 minutes |
-| Tier A | 190 (75%) |
-| Tier B | 58 (23%) |
-| Tier C | 4 (2%) |
-| Top Country | Trinidad and Tobago (64) |
-
-**Planned:**
-- Epic 15: Gauntlet Talent Discovery
-  - GitHub API integration
-  - LinkedIn integration (salary signals)
-  - Candidate model and scoring
-  - Talent-specific query expansion
-  - `--use-case talent` CLI flag
-
-**Tests:** 111 passing
-
----
-
-### 2025-12-30 Session 1
-**Commits:** f2423d6 → (current)
-
-**Built:**
-- **Directory harvesting queries** — chamber of commerce, trade associations, top contractors lists
-- **Design-build/hotel-renovation queries** — expanded buyer-finding queries
-- **Tier breakdown in report.md** — shows A/B/C/excluded distribution
-- **Duplicate contact detection by email** — `dedupe_contacts_by_email()` function
-- **Score contributions explained** — `score_contributions` field on Lead model
-- **Structured logging module** — `ProgressLogger` class with phase/progress/heartbeat
-
-**Query expansion now includes:**
-```
-# For each top market:
-- chamber of commerce {market} directory
-- chamber of commerce {market} members construction
-- contractors association {market} members
-- builders association {market} directory
-- construction association {market}
-- top contractors {market}
-- top construction companies {market}
-- largest builders {market}
-- design build firm {market}
-- hotel renovation contractor {market}
-- commercial renovation {market}
-```
-
-**Tests:** 45 passing (updated `score_lead` tests for tuple return)
-
----
-
-### 2025-12-29 Session 2
-**Commits:** 307906d → f2423d6
-
-**Built:**
-- Source-lead validity gate (domain alignment check)
-- `extracted_from_url` field on Lead model
-- `domain_aligned` and `needs_review` flags
-- Configurable LLM model via `SHOUDAO_MODEL` env var
-- **Directory page classifier** (directory/company_site/article/other)
-- **1-page-1-company guardrail** for non-directory pages
-- **Multilingual query expansion** with country → language mapping
-- Keyword packs for Spanish, French, Dutch
-
-**Best Run: 91 leads from 51 domains**
-| Metric | Value |
-|--------|-------|
-| Total Leads | 91 |
-| Sources | 54 |
-| Domains | 51 |
-| Queries Generated | 29 |
-| Time | ~9 minutes |
-| Puerto Rico (ES) | 22 leads |
-| Guadeloupe (FR) | 3 leads |
-
-**Guardrails working:**
-```
-[Guardrail] https://www.artisanwindowsanddoors.com/: page_type=company_site, limiting from 2 to 1 lead
-[Guardrail] https://www.martiniquemenuiseries.fr/: page_type=company_site, limiting from 2 to 1 lead
-```
-
-**Added to CSV:**
-- `extracted_from_url` — the URL that produced this lead
-- `domain_aligned` — yes/no if org domain matches source domain
-- `needs_review` — flagged for manual review if misaligned
-
-**Documented:**
-- GPT-5.x migration path (Story 12.2)
-- Model compatibility table
-
----
-
-### 2025-12-29 Session 1
-**Commits:** 5 (281de5a → bae49b2)
-
-**Built:**
-- Full MVP pipeline (25 files)
-- First successful runs (Florida contractors, Caribbean windows)
-
-**Fixed:**
-- Lead-centric extraction (contacts nested under org)
-- URL normalization (bare domains, junk filtering)
-- Sentinel value cleaning
-- Country normalization
-- Product-context-aware advice
-
-**Learned:**
-- Product/seller context dramatically improves advice quality
-- sources.json is essential for debugging
-- Ruff lint should be pre-commit, not post-commit
+| Date | Focus | Key Outcome |
+|------|-------|-------------|
+| 2025-12-30 | GitHub + LinkedIn + Scoring | Full talent pipeline: LinkedIn → GitHub → Score → Export |
+| 2025-12-30 | Recipe system | `shoudao recipe` CRUD commands |
+| 2025-12-30 | Talent discovery | Epic 15 complete, `shoudao talent` command |
+| 2025-12-29 | Recall improvements | 252 leads per run, tier breakdown |
+| 2025-12-29 | MVP build | First successful runs, 25 files |
