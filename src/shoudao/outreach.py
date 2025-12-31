@@ -346,4 +346,3 @@ def create_drafts_from_leads(
     print(f"[{elapsed()}] Created {len(created_rows)} drafts. Log: {log_csv}", flush=True)
 
     return len(created_rows)
-

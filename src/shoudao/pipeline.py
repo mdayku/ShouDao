@@ -214,8 +214,10 @@ class Pipeline:
             csv_path = run_dir / "leads.csv"
             json_path = run_dir / "leads.json"
 
-            with IncrementalCSVWriter(csv_path, CSV_COLUMNS) as csv_w, \
-                 IncrementalJSONWriter(json_path) as json_w:
+            with (
+                IncrementalCSVWriter(csv_path, CSV_COLUMNS) as csv_w,
+                IncrementalJSONWriter(json_path) as json_w,
+            ):
 
                 def on_advice_done(lead: Lead) -> None:
                     """Write lead incrementally as advice completes."""

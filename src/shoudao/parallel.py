@@ -277,5 +277,3 @@ class StreamingPipeline:
         )
 
         return leads
-
-

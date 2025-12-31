@@ -756,7 +756,9 @@ def outreach() -> None:
 
 
 @outreach.command(name="drafts")
-@click.option("--leads", "-l", required=True, type=click.Path(exists=True), help="Path to leads.json")
+@click.option(
+    "--leads", "-l", required=True, type=click.Path(exists=True), help="Path to leads.json"
+)
 @click.option(
     "--log",
     type=click.Path(),
@@ -826,7 +828,9 @@ def outreach_drafts(
     except ImportError as e:
         click.echo(f"Error: {e}", err=True)
         click.echo("\nInstall Gmail dependencies:", err=True)
-        click.echo("  pip install google-auth google-auth-oauthlib google-api-python-client", err=True)
+        click.echo(
+            "  pip install google-auth google-auth-oauthlib google-api-python-client", err=True
+        )
         sys.exit(1)
 
 
