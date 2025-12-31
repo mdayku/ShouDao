@@ -134,13 +134,32 @@ Page content:
 class Extractor:
     """LLM-based lead extractor using OpenAI structured outputs."""
 
+    # Default model: gpt-5-mini (cost-optimized reasoning)
+    # Fallback: gpt-4o (if gpt-5-mini fails)
+    DEFAULT_MODEL = "gpt-5-mini"
+    FALLBACK_MODEL = "gpt-4o"
+
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set")
         self.client = OpenAI(api_key=self.api_key)
-        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-4o-mini
-        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
+        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-5-mini
+        self.model = model or os.getenv("SHOUDAO_MODEL", self.DEFAULT_MODEL)
+
+    def _call_model(
+        self, model: str, system_prompt: str, user_prompt: str, response_format: type
+    ):
+        """Call the model with structured output. Returns parsed result or raises."""
+        completion = self.client.beta.chat.completions.parse(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=response_format,
+        )
+        return completion.choices[0].message.parsed
 
     def extract(self, fetch_result: FetchResult, prompt: str) -> ExtractionResult:
         """Extract leads from a fetched page."""
@@ -150,25 +169,26 @@ class Extractor:
         # Truncate content to avoid token limits
         content = fetch_result.text[:8000]
 
+        system_prompt = "You extract B2B leads from webpages. Each lead = one organization + its contacts. Be precise."
+        user_prompt = EXTRACTION_PROMPT.format(prompt=prompt, content=content)
+
+        # Try primary model first, then fallback
         try:
-            completion = self.client.beta.chat.completions.parse(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You extract B2B leads from webpages. Each lead = one organization + its contacts. Be precise.",
-                    },
-                    {
-                        "role": "user",
-                        "content": EXTRACTION_PROMPT.format(prompt=prompt, content=content),
-                    },
-                ],
-                response_format=ExtractionResult,
-            )
-            return completion.choices[0].message.parsed
+            return self._call_model(self.model, system_prompt, user_prompt, ExtractionResult)
         except Exception as e:
-            print(f"Extraction error for {fetch_result.url}: {e}")
-            return ExtractionResult(is_relevant=False)
+            # If using default model and it failed, try fallback
+            if self.model == self.DEFAULT_MODEL:
+                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                try:
+                    return self._call_model(
+                        self.FALLBACK_MODEL, system_prompt, user_prompt, ExtractionResult
+                    )
+                except Exception as e2:
+                    print(f"Fallback model also failed for {fetch_result.url}: {e2}")
+                    return ExtractionResult(is_relevant=False)
+            else:
+                print(f"Extraction error for {fetch_result.url}: {e}")
+                return ExtractionResult(is_relevant=False)
 
     def extraction_to_leads(
         self,
@@ -587,12 +607,31 @@ Page content:
 class TalentExtractor:
     """LLM-based candidate extractor for talent discovery."""
 
+    # Default model: gpt-5-mini (cost-optimized reasoning)
+    # Fallback: gpt-4o (if gpt-5-mini fails)
+    DEFAULT_MODEL = "gpt-5-mini"
+    FALLBACK_MODEL = "gpt-4o"
+
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set")
         self.client = OpenAI(api_key=self.api_key)
-        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
+        self.model = model or os.getenv("SHOUDAO_MODEL", self.DEFAULT_MODEL)
+
+    def _call_model(
+        self, model: str, system_prompt: str, user_prompt: str, response_format: type
+    ):
+        """Call the model with structured output. Returns parsed result or raises."""
+        completion = self.client.beta.chat.completions.parse(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=response_format,
+        )
+        return completion.choices[0].message.parsed
 
     def extract(self, fetch_result: FetchResult) -> TalentExtractionResult:
         """Extract candidates from a fetched page."""
@@ -602,25 +641,26 @@ class TalentExtractor:
         # Truncate content to avoid token limits
         content = fetch_result.text[:8000]
 
+        system_prompt = "You are a talent scout extracting candidate information from webpages. Focus on individuals (not companies) who build software, especially AI/LLM projects."
+        user_prompt = TALENT_EXTRACTION_PROMPT.format(content=content)
+
+        # Try primary model first, then fallback
         try:
-            completion = self.client.beta.chat.completions.parse(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a talent scout extracting candidate information from webpages. Focus on individuals (not companies) who build software, especially AI/LLM projects.",
-                    },
-                    {
-                        "role": "user",
-                        "content": TALENT_EXTRACTION_PROMPT.format(content=content),
-                    },
-                ],
-                response_format=TalentExtractionResult,
-            )
-            return completion.choices[0].message.parsed
+            return self._call_model(self.model, system_prompt, user_prompt, TalentExtractionResult)
         except Exception as e:
-            print(f"Talent extraction error for {fetch_result.url}: {e}")
-            return TalentExtractionResult(is_relevant=False)
+            # If using default model and it failed, try fallback
+            if self.model == self.DEFAULT_MODEL:
+                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                try:
+                    return self._call_model(
+                        self.FALLBACK_MODEL, system_prompt, user_prompt, TalentExtractionResult
+                    )
+                except Exception as e2:
+                    print(f"Fallback model also failed for {fetch_result.url}: {e2}")
+                    return TalentExtractionResult(is_relevant=False)
+            else:
+                print(f"Talent extraction error for {fetch_result.url}: {e}")
+                return TalentExtractionResult(is_relevant=False)
 
     def extraction_to_candidates(
         self,

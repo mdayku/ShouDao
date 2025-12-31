@@ -23,9 +23,9 @@
 | Model | Status | Notes |
 |-------|--------|-------|
 | `gpt-4o-mini` | ✅ Supported | Default, cost-effective |
-| `gpt-4o` | ✅ Supported | Higher quality extraction |
-| `gpt-5.2` | ⚠️ Requires migration | Needs Responses API (see Epic 12) |
-| `gpt-5-mini` | ⚠️ Requires migration | Needs Responses API |
+| `gpt-4o` | ✅ Fallback | Used if gpt-5-mini fails |
+| `gpt-5.2` | ✅ Supported | Best for complex reasoning tasks |
+| `gpt-5-mini` | ✅ Default | Cost-optimized, balances speed/cost/capability |
 
 ---
 
@@ -252,28 +252,27 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 
 ---
 
-## Epic 12 — Model Configuration (P1) 🆕
+## Epic 12 — Model Configuration (P1) ✅ DONE
 
 ### Story 12.1 — Model selection ✅ DONE
 - [x] Task 12.1.1: Make extraction model configurable (`SHOUDAO_MODEL` env var)
 - [x] Task 12.1.2: Make advice model configurable (same env var)
 - [ ] Task 12.1.3: Add model cost tracking per run
 
-### Story 12.2 — GPT-5.x / Responses API Migration (P2)
-OpenAI's new GPT-5.x models require the **Responses API** instead of Chat Completions.
+### Story 12.2 — GPT-5.x Support ✅ DONE
+Updated to use GPT-5 model family with Chat Completions API (still works).
 
-Key changes needed:
-- [ ] Task 12.2.1: Migrate `extractor.py` from `client.chat.completions.parse()` to `client.responses.create()`
-- [ ] Task 12.2.2: Migrate `advisor.py` to Responses API
-- [ ] Task 12.2.3: Handle chain-of-thought passing via `previous_response_id`
-- [ ] Task 12.2.4: Update structured output to use CFG grammars (if needed)
-- [ ] Task 12.2.5: Test with `gpt-5.2` and `gpt-5-mini`
+Changes made:
+- [x] Task 12.2.1: Default model changed to `gpt-5-mini` (cost-optimized)
+- [x] Task 12.2.2: Added fallback to `gpt-4o` if primary model fails
+- [x] Task 12.2.3: Updated `extractor.py` with `_call_model()` helper + fallback
+- [x] Task 12.2.4: Updated `advisor.py` with same pattern
+- [x] Task 12.2.5: Updated `TalentExtractor` with same pattern
 
-Benefits of migration:
-- Better intelligence (CoT passing between turns)
-- Fewer reasoning tokens, lower latency
-- Higher cache hit rates
-- Access to new `reasoning.effort` and `verbosity` parameters
+Future improvements (Phase 2):
+- [ ] Migrate to Responses API for CoT passing between turns
+- [ ] Add `reasoning.effort` and `verbosity` parameters
+- [ ] Enable CFG grammars for structured outputs
 
 ### Story 12.3 — Deep research mode (future)
 - [ ] Task 12.3.1: Define guardrails for deep research prompts

@@ -52,13 +52,32 @@ If no product context is provided, focus on the lead's industry needs.
 class Advisor:
     """LLM-based outreach advisor."""
 
+    # Default model: gpt-5-mini (cost-optimized reasoning)
+    # Fallback: gpt-4o (if gpt-5-mini fails)
+    DEFAULT_MODEL = "gpt-5-mini"
+    FALLBACK_MODEL = "gpt-4o"
+
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set")
         self.client = OpenAI(api_key=self.api_key)
-        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-4o-mini
-        self.model = model or os.getenv("SHOUDAO_MODEL", "gpt-4o-mini")
+        # Model can be set via env var SHOUDAO_MODEL, defaults to gpt-5-mini
+        self.model = model or os.getenv("SHOUDAO_MODEL", self.DEFAULT_MODEL)
+
+    def _call_model(
+        self, model: str, system_prompt: str, user_prompt: str, response_format: type
+    ):
+        """Call the model with structured output. Returns parsed result or raises."""
+        completion = self.client.beta.chat.completions.parse(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=response_format,
+        )
+        return completion.choices[0].message.parsed
 
     def generate_advice(
         self,
@@ -77,39 +96,45 @@ class Advisor:
         ]
         location = ", ".join(p for p in location_parts if p) or "Unknown"
 
+        system_prompt = "You are a B2B sales advisor. Generate specific, actionable outreach advice."
+        user_prompt = ADVICE_PROMPT.format(
+            org_name=lead.organization.name,
+            org_type=lead.organization.org_type,
+            industries=", ".join(lead.organization.industries) or "Unknown",
+            location=location,
+            size=lead.organization.size_indicator or "Unknown",
+            description=lead.organization.description or "No description",
+            role=role,
+            seller_context=seller_context or "B2B sales",
+            product_context=product_context or "B2B product/service",
+        )
+
+        # Try primary model first, then fallback
         try:
-            completion = self.client.beta.chat.completions.parse(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a B2B sales advisor. Generate specific, actionable outreach advice.",
-                    },
-                    {
-                        "role": "user",
-                        "content": ADVICE_PROMPT.format(
-                            org_name=lead.organization.name,
-                            org_type=lead.organization.org_type,
-                            industries=", ".join(lead.organization.industries) or "Unknown",
-                            location=location,
-                            size=lead.organization.size_indicator or "Unknown",
-                            description=lead.organization.description or "No description",
-                            role=role,
-                            seller_context=seller_context or "B2B sales",
-                            product_context=product_context or "B2B product/service",
-                        ),
-                    },
-                ],
-                response_format=AdviceOutput,
-            )
-            result = completion.choices[0].message.parsed
+            result = self._call_model(self.model, system_prompt, user_prompt, AdviceOutput)
             return ApproachAdvice(
                 recommended_angle=result.recommended_angle,
                 recommended_first_offer=result.recommended_first_offer,
                 qualifying_question=result.qualifying_question,
             )
         except Exception as e:
-            print(f"Advice generation error for {lead.organization.name}: {e}")
+            # If using default model and it failed, try fallback
+            if self.model == self.DEFAULT_MODEL:
+                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                try:
+                    result = self._call_model(
+                        self.FALLBACK_MODEL, system_prompt, user_prompt, AdviceOutput
+                    )
+                    return ApproachAdvice(
+                        recommended_angle=result.recommended_angle,
+                        recommended_first_offer=result.recommended_first_offer,
+                        qualifying_question=result.qualifying_question,
+                    )
+                except Exception as e2:
+                    print(f"Fallback model also failed for {lead.organization.name}: {e2}")
+            else:
+                print(f"Advice generation error for {lead.organization.name}: {e}")
+
             # Return a minimal valid advice
             return ApproachAdvice(
                 recommended_angle="Research this lead further before outreach.",
