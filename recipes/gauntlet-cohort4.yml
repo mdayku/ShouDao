@@ -1,0 +1,25 @@
+slug: gauntlet-cohort4
+name: Gauntlet AI Cohort 4 Candidates
+description: "Find software engineers with AI/LLM experience who would be good fits for Gauntlet AI's intensive training program"
+created_at: '2025-12-31T00:00:00.000000'
+updated_at: '2025-12-31T00:00:00.000000'
+prompt: software engineers with AI LLM experience building agents or demos
+use_case: talent
+filters:
+  countries: ["United States"]
+  industries: ["Software", "AI/ML", "Technology"]
+  org_types: ["startup", "tech company", "self-employed"]
+context:
+  product: "Gauntlet AI - 6-week intensive AI engineering program for career changers"
+  seller: "Gauntlet AI recruiting team"
+policy:
+  max_results: 100
+  max_pages: 100
+  blocked_domains:
+    - "linkedin.com"  # Use --linkedin flag instead
+    - "facebook.com"
+    - "twitter.com"
+  seed_sources:
+    - "https://github.com/trending?since=monthly"
+    - "https://huggingface.co/spaces"
+

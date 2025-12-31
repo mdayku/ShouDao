@@ -744,5 +744,91 @@ def reprocess(run_id: str, output: str, enrich: bool) -> None:
     click.echo(f"  Report: {report_path}")
 
 
+# =============================================================================
+# OUTREACH COMMANDS
+# =============================================================================
+
+
+@main.group()
+def outreach() -> None:
+    """Gmail outreach commands."""
+    pass
+
+
+@outreach.command(name="drafts")
+@click.option("--leads", "-l", required=True, type=click.Path(exists=True), help="Path to leads.json")
+@click.option(
+    "--log",
+    type=click.Path(),
+    default="outreach_log.csv",
+    help="Path to outreach log (default: outreach_log.csv)",
+)
+@click.option(
+    "--credentials",
+    type=click.Path(),
+    default="gmail_credentials.json",
+    help="Path to Gmail OAuth credentials JSON",
+)
+@click.option(
+    "--token",
+    type=click.Path(),
+    default="gmail_token.json",
+    help="Path to cached token JSON",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.6,
+    help="Minimum confidence threshold (default: 0.6)",
+)
+@click.option(
+    "--max-drafts",
+    type=int,
+    default=0,
+    help="Max drafts to create (0 = no limit)",
+)
+@click.option("--from-email", default="", help="Optional From address")
+@click.option("--dry-run", is_flag=True, help="Preview without creating drafts")
+def outreach_drafts(
+    leads: str,
+    log: str,
+    credentials: str,
+    token: str,
+    min_confidence: float,
+    max_drafts: int,
+    from_email: str,
+    dry_run: bool,
+) -> None:
+    """Create Gmail drafts for eligible leads (HITL)."""
+    from .outreach import create_drafts_from_leads
+
+    leads_path = Path(leads)
+    log_path = Path(log)
+    credentials_path = Path(credentials)
+    token_path = Path(token)
+
+    try:
+        count = create_drafts_from_leads(
+            leads_json=leads_path,
+            log_csv=log_path,
+            credentials_json=credentials_path,
+            token_json=token_path,
+            min_confidence=min_confidence,
+            max_drafts=max_drafts,
+            from_email=from_email or None,
+            dry_run=dry_run,
+        )
+        if not dry_run:
+            click.echo(f"\n[outreach] Created {count} drafts")
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    except ImportError as e:
+        click.echo(f"Error: {e}", err=True)
+        click.echo("\nInstall Gmail dependencies:", err=True)
+        click.echo("  pip install google-auth google-auth-oauthlib google-api-python-client", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

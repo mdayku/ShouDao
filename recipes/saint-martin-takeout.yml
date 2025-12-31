@@ -1,20 +1,27 @@
 slug: saint-martin-takeout
-name: Saint Martin Takeout Containers
-description: Food containers for restaurants and cafes in Saint Martin
+name: Saint Martin Takeout Container Buyers
+description: "Chain restaurants, cafes, supermarkets in Saint Martin (2+ locations) or Caribbean (5+ locations) that need takeout containers"
 created_at: '2025-12-30T20:00:00.000000'
-updated_at: '2025-12-30T20:00:00.000000'
-prompt: sushi containers takeout food containers suppliers for restaurants cafes in Saint Martin Sint Maarten
+updated_at: '2025-12-30T21:30:00.000000'
+prompt: 'restaurant chain OR supermarket OR grocery store OR fast food Sint Maarten Saint Martin -construction -contractor -builder'
 use_case: leads
 filters:
   countries: ["Saint Martin", "Sint Maarten"]
-  industries: ["Food Service", "Restaurant Supply", "Hospitality"]
-  org_types: ["supplier", "distributor", "wholesaler"]
+  industries: ["Restaurants", "Supermarkets", "Food Service", "Quick Service", "Grocery"]
+  org_types: ["chain", "franchise", "supermarket", "restaurant group"]
 context:
-  product: Sushi and takeout food containers
-  seller: Food packaging supplier
+  product: "Sushi and takeout food containers for chains with 2+ locations on St Martin or 5+ across Caribbean"
+  seller: Food packaging supplier from China
 policy:
-  max_results: 50
-  max_pages: 100
-  blocked_domains: []
-  seed_sources: []
+  max_results: 75
+  max_pages: 75
+  blocked_domains:
+    - "tripadvisor.com"
+    - "yelp.com"
+    - "yellowpages.com"
+  seed_sources:
+    - "https://www.cmsxm.net/"
+    - "https://www.legrandmarche.net/"
+    - "https://sxmfood.com/"
+    - "https://www.sintmaartengov.org/business/"
 

@@ -4,8 +4,8 @@
 | Field | Value |
 |---|---|
 | Project | ShouDao (销售的售 + 导游的导 = "Sales Guide") |
-| Version | 0.7 |
-| Last Updated | December 30, 2025 |
+| Version | 0.8 |
+| Last Updated | December 31, 2025 |
 
 ---
 
@@ -13,10 +13,12 @@
 
 | Setting | Value | Env Var | Location |
 |---------|-------|---------|----------|
-| LLM model | gpt-4o-mini (default) | `SHOUDAO_MODEL` | `extractor.py`, `advisor.py` |
+| LLM model | gpt-5-mini (default) | `SHOUDAO_MODEL` | `extractor.py`, `advisor.py` |
+| Fallback model | gpt-4o | — | `extractor.py`, `advisor.py` |
 | Search provider | Serper.dev | `SERPER_API_KEY` | `search.py` |
 | Rate limit | 1.5s between requests | — | `fetcher.py` |
 | Max pages per run | 100 | — | `pipeline.py` |
+| World context | `data/world_context.yaml` | — | `search.py`, `world_context.py` |
 
 ### Model Compatibility Notes
 
@@ -46,22 +48,40 @@
 
 ## 🎯 Recommended Next Steps
 
-### Talent Discovery is MVP-Ready
-Core talent discovery works without LinkedIn:
-- ✅ `shoudao talent` command
-- ✅ Candidate model + scoring
-- ✅ Talent-specific query expansion
-- ✅ Age estimation + salary bands
-- ✅ Page caching per run
-- ✅ Rate limit handling (429 backoff)
+### Current Status (v0.8)
+- ✅ Lead generation MVP complete
+- ✅ Talent discovery (LinkedIn + GitHub)
+- ✅ Recipe system for reproducible queries
+- ✅ WorldContext integration for product categories
+- ✅ Gmail outreach drafts (HITL)
+- ✅ GPT-5.x Responses API migration
 
 ### Next Priorities
 
 | Task | Why | Effort |
 |------|-----|--------|
-| **Epic 2/4/5/6/7 Cleanup** | Complete remaining MVP tasks | 4h |
+| **Gmail Setup** | Get OAuth credentials for outreach | 30m |
+| **Run Miami Recipe** | Test building materials in new market | 15m |
+| **Story 17.1**: Streaming advice | Parallelize advice gen during extraction | 4h |
 | **Task 12.1.3**: Model cost tracking | Know how much each run costs | 2h |
 | **Story 13.5**: X/Twitter integration | Signal-first sourcing | 6h |
+| **Epic 16.4**: Template system | Multiple email templates per use case | 4h |
+
+### Outreach Ready ✅ NEW
+Gmail draft creation is now available:
+```bash
+shoudao outreach drafts \
+  --leads .\runs\20251230\leads.json \
+  --credentials gmail_credentials.json \
+  --min-confidence 0.6 \
+  --dry-run
+```
+
+**Setup required:**
+1. Google Cloud Console → Create project
+2. Enable Gmail API
+3. Create OAuth 2.0 credentials (Desktop app)
+4. Download as `gmail_credentials.json`
 
 ### LinkedIn Status ✅ WORKING
 LinkedIn integration is now **available** via Apify:
@@ -82,6 +102,23 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 |------|-----|
 | Task 4.2.2 (PDF extraction) | Talent surfaces are web-native |
 | Story 6.2 (Crawl policy) | Can add later if needed |
+
+---
+
+## Active Recipes
+
+| Slug | Market | Product/Use Case | Status |
+|------|--------|------------------|--------|
+| `caribbean-windows` | Caribbean (17 countries) | Windows & doors | ✅ Working |
+| `saint-martin-takeout` | Sint Maarten / Saint Martin | Takeout containers | ✅ Working (75 results) |
+| `miami-windows` | Miami / Fort Lauderdale / South Florida | Impact windows | ✅ Ready |
+| `gauntlet-cohort4` | United States | Talent discovery (AI engineers) | ✅ Ready |
+
+### Recipe Files
+- `recipes/caribbean-windows.yml` - Building materials (distributors, installers, contractors)
+- `recipes/saint-martin-takeout.yml` - Food service (chain restaurants, supermarkets)
+- `recipes/miami-windows.yml` - Building materials (US market)
+- `recipes/gauntlet-cohort4.yml` - Talent discovery (AI/LLM engineers for Cohort 4)
 
 ---
 
@@ -270,14 +307,21 @@ Phase 2 (Responses API):
 - [x] Task 12.2.3: Migrated `Extractor` to use `client.responses.create()` for GPT-5.x
 - [x] Task 12.2.4: Migrated `TalentExtractor` to Responses API
 - [x] Task 12.2.5: Migrated `Advisor` to Responses API
-- [x] Task 12.2.6: Added `reasoning.effort: "none"` for low-latency extraction
+- [x] Task 12.2.6: Added `reasoning.effort: "minimal"` for low-latency extraction
 - [x] Task 12.2.7: Added JSON schema format for structured outputs
 - [x] Task 12.2.8: Backward compatible - falls back to Chat Completions for gpt-4o
 
+Phase 3 (GPT-5 Fixes - Dec 31):
+- [x] Task 12.2.9: Fixed `reasoning.effort: "none"` → `"minimal"` (gpt-5-mini doesn't support "none")
+- [x] Task 12.2.10: Added `"strict": True` to JSON schema format
+- [x] Task 12.2.11: Added `"required"` array to schema (OpenAI API requirement)
+- [x] Task 12.2.12: Schema now includes all properties in `required` field
+
 Architecture:
-- GPT-5.x models: Uses Responses API with `reasoning.effort: "none"`
+- GPT-5.x models: Uses Responses API with `reasoning.effort: "minimal"`, `strict: true`
 - Older models (gpt-4o): Uses Chat Completions API with `beta.chat.completions.parse()`
 - Auto-detection via `_is_gpt5_model()` helper
+- Automatic fallback to gpt-4o on GPT-5 errors
 
 ### Story 12.3 — Deep research mode (future)
 - [ ] Task 12.3.1: Define guardrails for deep research prompts
@@ -326,6 +370,152 @@ Add structured logging for long runs.
 - [x] Task 14.4.2: Add country/language progress logs (`ProgressLogger` class)
 - [x] Task 14.4.3: Add heartbeat logs for long waits
 - [x] Task 14.4.4: Log dropped leads with reason
+
+### Story 14.5 — Progress Output Improvements ✅ DONE (Dec 31)
+Fix buffered output issue on Windows/PowerShell.
+
+- [x] Task 14.5.1: Added `sys.stdout.reconfigure(line_buffering=True)` to logger.py
+- [x] Task 14.5.2: Added `flush=True` to all `_print()` calls in ProgressLogger
+- [x] Task 14.5.3: Added line buffering to pipeline.py
+- [x] Task 14.5.4: Output now streams immediately instead of at end
+
+### Story 14.6 — WorldContext Integration ✅ DONE (Dec 31)
+Wire `data/world_context.yaml` into search query expansion.
+
+- [x] Task 14.6.1: Added `_get_world_context()` lazy loader in search.py
+- [x] Task 14.6.2: Added `_detect_product_category()` (building_materials vs food_service)
+- [x] Task 14.6.3: Added `_get_keywords_for_category()` with WorldContext fallback
+- [x] Task 14.6.4: Query expansion uses WorldContext keywords for multilingual queries
+- [x] Task 14.6.5: Added food_service buyer expansion queries (restaurant chain, supermarket, etc.)
+- [x] Task 14.6.6: Caribbean triggers now include "maarten", "st martin", "saint martin"
+- [x] Task 14.6.7: Updated `.cursorrules` with WorldContext integration requirements
+
+**Architecture:**
+```
+Recipe → prompt → _detect_product_category() → WorldContext keywords → query expansion
+```
+
+**Product Categories:**
+- `building_materials`: windows, doors, glazing, aluminum, glass
+- `food_service`: takeout, sushi, restaurant, cafe, supermarket
+- `unknown`: falls back to original prompt
+
+---
+
+## Epic 16 — Gmail Outreach (HITL) 🆕
+
+Goal: Create Gmail drafts for eligible leads (Human-In-The-Loop).
+
+### Story 16.1 — Gmail Draft Module ✅ DONE (Dec 31)
+
+- [x] Task 16.1.1: Created `src/shoudao/outreach.py` module
+- [x] Task 16.1.2: Implemented `build_draft_candidate()` - converts Lead to DraftCandidate
+- [x] Task 16.1.3: Implemented `is_eligible()` - filters by email/confidence/needs_review
+- [x] Task 16.1.4: Implemented `build_raw_email()` - RFC 2822 → base64url
+- [x] Task 16.1.5: Implemented `create_draft()` - Gmail API call
+- [x] Task 16.1.6: Implemented `create_drafts_from_leads()` with progress output
+
+**Gmail API Calls:**
+```python
+# Build service
+service = googleapiclient.discovery.build("gmail", "v1", credentials=creds)
+
+# Create draft
+raw = base64.urlsafe_b64encode(mime_bytes).decode("utf-8")
+service.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
+```
+
+**OAuth Scope:** `https://www.googleapis.com/auth/gmail.compose` (draft-only)
+
+### Story 16.2 — CLI Integration ✅ DONE (Dec 31)
+
+- [x] Task 16.2.1: Added `shoudao outreach` command group
+- [x] Task 16.2.2: Added `shoudao outreach drafts` subcommand
+- [x] Task 16.2.3: Options: `--leads`, `--log`, `--credentials`, `--token`, `--min-confidence`, `--max-drafts`, `--dry-run`
+- [x] Task 16.2.4: Idempotent via `outreach_log.csv` (dedupe_key as lead_id)
+- [x] Task 16.2.5: Progress output with timestamps
+
+**Usage:**
+```bash
+shoudao outreach drafts \
+  --leads .\runs\20251230\leads.json \
+  --credentials .\secrets\gmail_credentials.json \
+  --min-confidence 0.6 \
+  --max-drafts 25 \
+  --dry-run
+```
+
+### Story 16.3 — Draft Composition (from Lead fields)
+
+Email subject/body composed from Lead advice fields:
+- **Subject:** `Quick question, {org_name}`
+- **Body:** Opener + recommended_angle + recommended_first_offer + qualifying_question + signature
+
+### Story 16.4 — Future Enhancements
+
+- [ ] Task 16.4.1: Template system (multiple email templates per use case)
+- [ ] Task 16.4.2: Personalization tokens ({org_name}, {city}, {industry})
+- [ ] Task 16.4.3: A/B test subject lines
+- [ ] Task 16.4.4: Follow-up sequences (draft series)
+- [ ] Task 16.4.5: Reply tracking (via Gmail API)
+
+---
+
+## Epic 17 — Pipeline Performance (P1) ✅ DONE
+
+Goal: Reduce end-to-end pipeline latency, especially for longer runs (75+ leads).
+
+### Implementation (2025-12-31)
+
+Created `src/shoudao/parallel.py` with:
+- `parallel_extract()` - ThreadPoolExecutor with 5 concurrent workers
+- `parallel_advise()` - Parallel advice generation with progress updates
+- `IncrementalCSVWriter` - Thread-safe CSV writer with flush
+- `IncrementalJSONWriter` - Collects items, writes final JSON array
+
+### Story 17.1 — Streaming Advice Generation ✅ DONE
+
+**Idea:** Start generating advice for a lead as soon as it passes the buyer gate (during dedupe phase), rather than waiting for all leads to be scored first.
+
+Benefits:
+- Hide latency: advice generation overlaps with remaining extraction/dedupe
+- Earlier first output: user sees progress sooner
+- Better UX: "Advice generated for X/Y leads" updates during run
+
+Implementation notes:
+- Use `asyncio` or `concurrent.futures.ThreadPoolExecutor`
+- Respect OpenAI rate limits (advice uses same model as extraction)
+- May need to buffer leads and batch advice calls
+
+Tasks:
+- [x] Task 17.1.1: Refactor `generate_advice` to accept single lead
+- [x] Task 17.1.2: Create async/threaded advice generator (`parallel_advise`)
+- [x] Task 17.1.3: Integrate with pipeline - trigger advice on lead confirmation
+- [x] Task 17.1.4: Update progress logging for streaming advice (every 10 leads)
+- [x] Task 17.1.5: Handle errors gracefully (don't block pipeline)
+
+### Story 17.2 — Incremental Output Writes ✅ DONE
+
+**Idea:** Write leads to CSV/JSON incrementally rather than all at end.
+
+Benefits:
+- Partial output available even if run crashes
+- Faster perceived completion (file grows during run)
+- Can tail -f the output file
+
+Tasks:
+- [x] Task 17.2.1: Refactor CSV exporter to append mode (`IncrementalCSVWriter`)
+- [x] Task 17.2.2: Refactor JSON exporter to streaming (`IncrementalJSONWriter`)
+- [x] Task 17.2.3: Excel export stays batch (library constraint)
+
+### Story 17.3 — Parallel Extraction ✅ DONE
+
+**Idea:** Extract from multiple pages simultaneously (with rate limiting).
+
+Tasks:
+- [x] Task 17.3.1: Add semaphore-based concurrency to extraction (`parallel_extract`)
+- [x] Task 17.3.2: Configurable parallelism (default 5 workers)
+- [ ] Task 17.3.3: Backoff on 429 errors (future - rely on OpenAI SDK retry for now)
 
 ---
 
@@ -557,6 +747,13 @@ Potential integrations if budget allows:
 
 | Date | Focus | Key Outcome |
 |------|-------|-------------|
+| 2025-12-31 | Pipeline Performance | Epic 17: Documented streaming advice, incremental writes, parallel extraction |
+| 2025-12-31 | GPT-5 Schema Fix | Recursive `_ensure_all_required()` for nested Pydantic models |
+| 2025-12-31 | Gmail Outreach | Epic 16: `shoudao outreach drafts` command, HITL draft creation |
+| 2025-12-31 | WorldContext Integration | Query expansion uses `world_context.yaml` for product category keywords |
+| 2025-12-31 | GPT-5 Fixes | Fixed schema required fields, reasoning.effort: "minimal" |
+| 2025-12-31 | Progress Output | Immediate output streaming (flush=True, line buffering) |
+| 2025-12-31 | Food Service Queries | Added restaurant chain, supermarket, fast food expansion queries |
 | 2025-12-30 | GitHub + LinkedIn + Scoring | Full talent pipeline: LinkedIn → GitHub → Score → Export |
 | 2025-12-30 | Recipe system | `shoudao recipe` CRUD commands |
 | 2025-12-30 | Talent discovery | Epic 15 complete, `shoudao talent` command |

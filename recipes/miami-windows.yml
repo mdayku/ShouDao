@@ -1,22 +1,32 @@
 slug: miami-windows
 name: Miami Windows & Doors
-description: Bay windows, sliding doors, and impact windows for South Florida market
+description: "Hurricane-rated impact windows, bay windows, and sliding doors for South Florida construction market"
 created_at: '2025-12-30T20:00:00.000000'
-updated_at: '2025-12-30T20:00:00.000000'
-prompt: bay windows, sliding doors, and impact windows suppliers distributors installers in Miami Fort Lauderdale South Florida
+updated_at: '2025-12-31T05:00:00.000000'
+prompt: '"impact windows" OR "bay windows" OR "sliding doors" OR "hurricane windows" supplier distributor installer contractor Miami OR "Fort Lauderdale" OR "West Palm Beach" Florida'
 use_case: leads
 filters:
   countries: ["United States"]
-  industries: ["Construction", "Building Materials", "Windows & Doors"]
-  org_types: ["supplier", "distributor", "installer", "contractor"]
+  industries: ["Construction", "Building Materials", "Windows & Doors", "Home Improvement"]
+  org_types: ["supplier", "distributor", "installer", "contractor", "dealer"]
 context:
-  product: Hurricane-rated bay windows and sliding doors from China
-  seller: Chinese building materials exporter
+  product: "Hurricane-rated impact windows, bay windows, and sliding doors from China - commercial and residential"
+  seller: "Chinese building materials exporter seeking US distributors and contractors"
 policy:
-  max_results: 50
+  max_results: 75
   max_pages: 100
-  blocked_domains: []
+  blocked_domains:
+    - "tripadvisor.com"
+    - "yelp.com"
+    - "facebook.com"
+    - "pinterest.com"
+    - "amazon.com"
+    - "homedepot.com"
+    - "lowes.com"
   seed_sources:
     - "https://www.houzz.com/professionals/window-dealers/c/Miami--FL"
     - "https://www.yellowpages.com/miami-fl/windows"
-
+    - "https://www.bbb.org/us/fl/miami/category/windows"
+    - "https://www.miamichamber.com/business-directory"
+    - "https://www.ftlchamber.com/list/"
+    - "https://www.sfbuildinggroup.com/"

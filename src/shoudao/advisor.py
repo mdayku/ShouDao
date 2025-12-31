@@ -72,6 +72,24 @@ class Advisor:
         """Check if model supports GPT-5.x Responses API parameters."""
         return any(model.startswith(m) for m in self.GPT5_MODELS)
 
+    def _ensure_all_required(self, schema: dict) -> dict:
+        """Recursively ensure all properties are in 'required' array at every level."""
+        if not isinstance(schema, dict):
+            return schema
+        if "$defs" in schema:
+            for def_name, def_schema in schema["$defs"].items():
+                schema["$defs"][def_name] = self._ensure_all_required(def_schema)
+        if "properties" in schema:
+            schema["required"] = list(schema["properties"].keys())
+            for prop_name, prop_schema in schema["properties"].items():
+                schema["properties"][prop_name] = self._ensure_all_required(prop_schema)
+        if "items" in schema:
+            schema["items"] = self._ensure_all_required(schema["items"])
+        for key in ("anyOf", "oneOf"):
+            if key in schema:
+                schema[key] = [self._ensure_all_required(s) for s in schema[key]]
+        return schema
+
     def _call_model(self, model: str, system_prompt: str, user_prompt: str, response_format: type):
         """Call the model with structured output. Returns parsed result or raises."""
         import json
@@ -80,13 +98,22 @@ class Advisor:
 
         if self._is_gpt5_model(model):
             # Use Responses API for GPT-5.x models
+            # Build schema with all properties required at EVERY level (OpenAI requirement)
+            schema = response_format.model_json_schema()
+            schema = self._ensure_all_required(schema)
+
             response = self.client.responses.create(
                 model=model,
                 input=full_prompt,
                 text={
-                    "format": {"type": "json_schema", "schema": response_format.model_json_schema()}
+                    "format": {
+                        "type": "json_schema",
+                        "name": response_format.__name__,
+                        "strict": True,
+                        "schema": schema,
+                    }
                 },
-                reasoning={"effort": "none"},
+                reasoning={"effort": "minimal"},
             )
             return response_format.model_validate(json.loads(response.output_text))
         else:

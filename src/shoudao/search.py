@@ -5,6 +5,7 @@ ShouDao search provider - discover URLs from prompts.
 import os
 import time
 from abc import ABC, abstractmethod
+from typing import Any
 
 import httpx
 from tenacity import (
@@ -15,6 +16,22 @@ from tenacity import (
 )
 
 from .models import RunConfig
+
+# Lazy-load WorldContext to avoid circular imports
+_world_context_cache: Any = None
+
+
+def _get_world_context() -> Any:
+    """Lazy-load and cache WorldContext."""
+    global _world_context_cache
+    if _world_context_cache is None:
+        try:
+            from .world_context import WorldContext
+
+            _world_context_cache = WorldContext.load()
+        except Exception:
+            _world_context_cache = False  # Mark as failed, don't retry
+    return _world_context_cache if _world_context_cache else None
 
 
 class RateLimitError(Exception):
@@ -186,10 +203,62 @@ KEYWORD_PACKS: dict[str, dict[str, list[str]]] = {
 }
 
 
+def _detect_product_category(prompt_lower: str) -> str:
+    """Detect product category from prompt text."""
+    building_keywords = ["window", "door", "glazing", "aluminum", "glass", "roofing", "flooring"]
+    food_keywords = [
+        "takeout",
+        "food container",
+        "sushi",
+        "restaurant",
+        "cafe",
+        "supermarket",
+        "grocery",
+        "fast food",
+        "packaging",
+        "disposable",
+    ]
+
+    if any(kw in prompt_lower for kw in building_keywords):
+        return "building_materials"
+    elif any(kw in prompt_lower for kw in food_keywords):
+        return "food_service"
+    return "unknown"
+
+
+def _get_keywords_for_category(lang: str, category: str) -> dict[str, list[str]]:
+    """Get keywords from WorldContext or fall back to hardcoded."""
+    ctx = _get_world_context()
+
+    if ctx:
+        # Try to get from WorldContext
+        lang_data = ctx._data.get("languages", {}).get(lang, {}).get("keywords", {})
+
+        if category == "food_service" and "food_service" in lang_data:
+            fs = lang_data["food_service"]
+            return {
+                "products": fs.get("products", []),
+                "types": fs.get("types", []),
+                "buyers": fs.get("buyers", []),
+            }
+        elif category == "building_materials":
+            return {
+                "products": lang_data.get("products", []),
+                "types": lang_data.get("types", []),
+                "modifiers": lang_data.get("modifiers", []),
+            }
+
+    # Fall back to hardcoded KEYWORD_PACKS
+    if lang in KEYWORD_PACKS:
+        return KEYWORD_PACKS[lang]
+    return {}
+
+
 def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
     """
     Expand a user prompt into multiple search queries.
     Includes multilingual expansion for Caribbean markets.
+    Uses WorldContext for keywords when available.
     """
     queries = []
 
@@ -226,64 +295,109 @@ def expand_prompt_to_queries(prompt: str, filters: dict) -> list[str]:
         "aruba",
         "curacao",
         "cayman",
+        "maarten",  # Sint Maarten
+        "st martin",  # Saint Martin
+        "saint martin",  # Saint Martin (full)
     ]
     is_caribbean_prompt = any(trigger in prompt_lower for trigger in caribbean_triggers)
 
     if is_caribbean_prompt:
         # Detect product category from prompt
-        is_window_door = any(
-            term in prompt_lower for term in ["window", "door", "glazing", "aluminum", "glass"]
-        )
+        product_category = _detect_product_category(prompt_lower)
+        is_window_door = product_category == "building_materials"
+        is_food_service = product_category == "food_service"
 
         # Add island-specific queries with language variants
         for country, languages in CARIBBEAN_COUNTRY_LANGUAGES.items():
             for lang in languages[:1]:  # Primary language only for now
+                # Get keywords from WorldContext or fallback
+                keywords = _get_keywords_for_category(lang, product_category)
+
                 if lang == "en":
-                    # English query
+                    # English query - use WorldContext keywords if available
                     if is_window_door:
                         queries.append(f"windows doors supplier installer {country}")
+                    elif is_food_service and keywords.get("products"):
+                        # Use food service keywords from WorldContext
+                        product = keywords["products"][0]
+                        buyer = keywords.get("buyers", ["restaurant"])[0]
+                        queries.append(f"{product} {buyer} {country}")
                     else:
                         queries.append(f"{prompt} {country}")
-                elif lang in KEYWORD_PACKS and is_window_door:
-                    # Non-English query using keyword packs
-                    pack = KEYWORD_PACKS[lang]
-                    product = pack["products"][0]  # Primary product term
-                    org_type = pack["types"][0]  # Primary type
-                    queries.append(f"{product} {org_type} {country}")
+                elif keywords.get("products"):
+                    # Non-English query using WorldContext or fallback keywords
+                    product = keywords["products"][0]  # Primary product term
+                    org_type = keywords.get("types", [""])[0]  # Primary type
+                    if product and org_type:
+                        queries.append(f"{product} {org_type} {country}")
+                    elif product:
+                        queries.append(f"{product} {country}")
 
-        # Add contractor/builder expansion queries (these are BUYERS, not sellers)
+        # Add contractor/builder expansion queries ONLY for building materials prompts
         # These catch companies that USE windows/doors, not just sell them
-        top_markets = [
-            "Jamaica",
-            "Puerto Rico",
-            "Dominican Republic",
-            "Trinidad and Tobago",
-            "Bahamas",
-            "Barbados",
-        ]
-        for market in top_markets:
-            # Core contractor queries
-            queries.append(f"construction company hotel resort {market}")
-            queries.append(f"general contractor commercial {market}")
-            queries.append(f"building contractor {market}")
-            # Design-build and renovation (Task 14.2.4)
-            queries.append(f"design build firm {market}")
-            queries.append(f"hotel renovation contractor {market}")
-            queries.append(f"commercial renovation {market}")
+        if is_window_door:
+            top_markets = [
+                "Jamaica",
+                "Puerto Rico",
+                "Dominican Republic",
+                "Trinidad and Tobago",
+                "Bahamas",
+                "Barbados",
+            ]
+            for market in top_markets:
+                # Core contractor queries
+                queries.append(f"construction company hotel resort {market}")
+                queries.append(f"general contractor commercial {market}")
+                queries.append(f"building contractor {market}")
+                # Design-build and renovation (Task 14.2.4)
+                queries.append(f"design build firm {market}")
+                queries.append(f"hotel renovation contractor {market}")
+                queries.append(f"commercial renovation {market}")
 
-        # Directory harvesting queries (Tasks 14.3.1-14.3.3)
-        for market in top_markets:
-            # Chamber of commerce directories
-            queries.append(f"chamber of commerce {market} directory")
-            queries.append(f"chamber of commerce {market} members construction")
-            # Trade association member lists
-            queries.append(f"contractors association {market} members")
-            queries.append(f"builders association {market} directory")
-            queries.append(f"construction association {market}")
-            # Top contractors lists
-            queries.append(f"top contractors {market}")
-            queries.append(f"top construction companies {market}")
-            queries.append(f"largest builders {market}")
+            # Directory harvesting queries (Tasks 14.3.1-14.3.3)
+            for market in top_markets:
+                # Chamber of commerce directories
+                queries.append(f"chamber of commerce {market} directory")
+                queries.append(f"chamber of commerce {market} members construction")
+                # Trade association member lists
+                queries.append(f"contractors association {market} members")
+                queries.append(f"builders association {market} directory")
+                queries.append(f"construction association {market}")
+                # Top contractors lists
+                queries.append(f"top contractors {market}")
+                queries.append(f"top construction companies {market}")
+                queries.append(f"largest builders {market}")
+
+        # Add food service buyer expansion queries ONLY for food service prompts
+        # These catch chain restaurants, supermarkets, hotels with F&B operations
+        if is_food_service:
+            # Focus on the specific markets mentioned in prompt, or top Caribbean markets
+            food_markets = [
+                "Sint Maarten",
+                "Saint Martin",
+                "Puerto Rico",
+                "Jamaica",
+                "Bahamas",
+                "Dominican Republic",
+            ]
+            for market in food_markets:
+                # Chain/franchise queries - these are the high-volume buyers
+                queries.append(f"restaurant chain {market}")
+                queries.append(f"franchise restaurant {market}")
+                queries.append(f"supermarket chain {market}")
+                queries.append(f"grocery store chain {market}")
+                # Hotel F&B - large volume buyers
+                queries.append(f"hotel restaurant {market}")
+                queries.append(f"resort dining {market}")
+                # Quick service / fast food
+                queries.append(f"fast food {market}")
+                queries.append(f"quick service restaurant {market}")
+
+            # Food industry directories
+            for market in food_markets[:3]:  # Top 3 only to limit query count
+                queries.append(f"restaurant association {market}")
+                queries.append(f"hospitality association {market}")
+                queries.append(f"food service directory {market}")
 
     return queries
 
@@ -349,9 +463,26 @@ TALENT_QUERY_TEMPLATES = {
 }
 
 
+def _get_talent_templates_from_world_context() -> dict[str, list[str]] | None:
+    """Load talent query templates from WorldContext if available."""
+    ctx = _get_world_context()
+    if not ctx:
+        return None
+
+    # Try to get Gauntlet-specific templates
+    talent_programs = ctx._data.get("talent_programs", {})
+    gauntlet = talent_programs.get("gauntlet", {})
+    templates = gauntlet.get("query_templates", {})
+
+    if templates:
+        return templates
+    return None
+
+
 def expand_talent_queries(prompt: str, filters: dict | None = None) -> list[str]:
     """
     Expand a talent discovery prompt into search queries.
+    Uses WorldContext for templates when available, falls back to hardcoded.
 
     Args:
         prompt: The user's search prompt (e.g., "AI engineers building agents")
@@ -371,8 +502,12 @@ def expand_talent_queries(prompt: str, filters: dict | None = None) -> list[str]
         queries.append(f"{prompt} portfolio")
         queries.append(f"{prompt} project")
 
+    # Try WorldContext templates first, fall back to hardcoded
+    wc_templates = _get_talent_templates_from_world_context()
+    templates = wc_templates if wc_templates else TALENT_QUERY_TEMPLATES
+
     # Add all template queries by default
-    for category, category_queries in TALENT_QUERY_TEMPLATES.items():
+    for category, category_queries in templates.items():
         # Check if we should filter by category
         categories_filter = filters.get("categories")
         if categories_filter and category not in categories_filter:
@@ -385,6 +520,18 @@ def expand_talent_queries(prompt: str, filters: dict | None = None) -> list[str]
         queries.append(f'site:github.com "{university}" cs project')
         queries.append(f'site:github.com "{university}" ai project')
         queries.append(f'"{university}" computer science github')
+
+    # Add top schools from WorldContext (if not filtering by specific university)
+    if not university:
+        ctx = _get_world_context()
+        if ctx:
+            talent_programs = ctx._data.get("talent_programs", {})
+            gauntlet = talent_programs.get("gauntlet", {})
+            target_schools = gauntlet.get("target_schools", {})
+            # Only add tier 1 schools to avoid query explosion
+            tier_1 = target_schools.get("tier_1", [])[:5]  # Top 5 only
+            for school in tier_1:
+                queries.append(f'site:github.com "{school}" ai project')
 
     # Add role-specific queries
     role = filters.get("role")

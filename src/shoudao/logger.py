@@ -10,6 +10,22 @@ Answers three questions:
 import sys
 from datetime import UTC, datetime
 
+# Force line buffering for immediate output (important on Windows/PowerShell)
+try:
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore
+except Exception:
+    pass  # Fallback for non-reconfigurable streams
+
+
+def _print(*args: object, **kwargs: object) -> None:
+    """Print with immediate flush."""
+    print(*args, **kwargs, flush=True)
+
+
+def _eprint(*args: object, **kwargs: object) -> None:
+    """Print to stderr with immediate flush."""
+    print(*args, **kwargs, file=sys.stderr, flush=True)
+
 
 class ProgressLogger:
     """
@@ -33,9 +49,9 @@ class ProgressLogger:
         elapsed = (now - self.start_time).total_seconds()
 
         if detail:
-            print(f"[Phase] {name}: {detail} ({elapsed:.1f}s)")
+            _print(f"[Phase] {name}: {detail} ({elapsed:.1f}s)")
         else:
-            print(f"[Phase] {name} ({elapsed:.1f}s)")
+            _print(f"[Phase] {name} ({elapsed:.1f}s)")
 
     def progress(
         self,
@@ -47,9 +63,9 @@ class ProgressLogger:
         """Log a progress update (e.g., country 3/12)."""
         pct = (current / total * 100) if total > 0 else 0
         if detail:
-            print(f"  [{item} {current}/{total}] {detail} ({pct:.0f}%)")
+            _print(f"  [{item} {current}/{total}] {detail} ({pct:.0f}%)")
         else:
-            print(f"  [{item} {current}/{total}] ({pct:.0f}%)")
+            _print(f"  [{item} {current}/{total}] ({pct:.0f}%)")
 
     def country(
         self,
@@ -60,7 +76,7 @@ class ProgressLogger:
     ) -> None:
         """Log progress for a country."""
         lang_str = ", ".join(languages) if languages else "en"
-        print(f"  [Country {index}/{total}] {country} [{lang_str}]")
+        _print(f"  [Country {index}/{total}] {country} [{lang_str}]")
 
     def query(
         self,
@@ -72,36 +88,36 @@ class ProgressLogger:
         """Log a search query (verbose only)."""
         if self.verbose:
             truncated = query[:60] + "..." if len(query) > 60 else query
-            print(f"    [Query {index}/{total}] ({language}) {truncated}")
+            _print(f"    [Query {index}/{total}] ({language}) {truncated}")
 
     def sources(self, serp_count: int, accepted: int, rejected: int) -> None:
         """Log SERP results summary."""
-        print(f"    [SERP] {serp_count} results -> {accepted} accepted, {rejected} filtered")
+        _print(f"    [SERP] {serp_count} results -> {accepted} accepted, {rejected} filtered")
 
     def pages(self, fetched: int, total: int) -> None:
         """Log page fetch progress."""
-        print(f"    [Pages] {fetched}/{total} fetched")
+        _print(f"    [Pages] {fetched}/{total} fetched")
 
     def extracted(self, companies: int, kept: int, dropped: int = 0) -> None:
         """Log extraction results."""
         if dropped > 0:
-            print(f"    [Extracted] {companies} companies ({kept} kept, {dropped} dropped)")
+            _print(f"    [Extracted] {companies} companies ({kept} kept, {dropped} dropped)")
         else:
-            print(f"    [Extracted] {companies} companies ({kept} kept)")
+            _print(f"    [Extracted] {companies} companies ({kept} kept)")
 
     def deduped(self, before: int, after: int) -> None:
         """Log deduplication results."""
-        print(f"  [Deduped] {before} -> {after} companies")
+        _print(f"  [Deduped] {before} -> {after} companies")
 
     def tier_distribution(self, tiers: dict[str, int]) -> None:
         """Log tier distribution."""
         tier_str = ", ".join(f"{k}={v}" for k, v in sorted(tiers.items()))
-        print(f"  [Tiers] {tier_str}")
+        _print(f"  [Tiers] {tier_str}")
 
     def skip(self, reason: str, detail: str) -> None:
         """Log a skip/drop with reason (verbose only)."""
         if self.verbose:
-            print(f"    [Skip] {reason}: {detail[:60]}...")
+            _print(f"    [Skip] {reason}: {detail[:60]}...")
 
     def heartbeat(self, activity: str = "Working") -> None:
         """
@@ -113,7 +129,7 @@ class ProgressLogger:
 
         if elapsed_since_last >= 30:  # Heartbeat every 30s
             total_elapsed = (now - self.start_time).total_seconds()
-            print(f"  [Heartbeat] {activity}... ({total_elapsed:.0f}s elapsed)")
+            _print(f"  [Heartbeat] {activity}... ({total_elapsed:.0f}s elapsed)")
             self.last_heartbeat = now
 
     def finish(self, leads: int, output_dir: str = "") -> None:
@@ -122,15 +138,15 @@ class ProgressLogger:
         minutes = int(elapsed // 60)
         seconds = int(elapsed % 60)
 
-        print(f"\n[ShouDao] Run complete in {minutes}m{seconds}s")
-        print(f"  Leads: {leads}")
+        _print(f"\n[ShouDao] Run complete in {minutes}m{seconds}s")
+        _print(f"  Leads: {leads}")
         if output_dir:
-            print(f"  Output: {output_dir}")
+            _print(f"  Output: {output_dir}")
 
     def error(self, msg: str) -> None:
         """Log an error."""
-        print(f"[Error] {msg}", file=sys.stderr)
+        _eprint(f"[Error] {msg}")
 
     def warning(self, msg: str) -> None:
         """Log a warning."""
-        print(f"[Warning] {msg}", file=sys.stderr)
+        _eprint(f"[Warning] {msg}")

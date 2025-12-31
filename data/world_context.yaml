@@ -356,3 +356,109 @@ product_categories:
     - linens
     - amenities
 
+# Talent recruiting contexts
+talent_programs:
+  gauntlet:
+    name: "Gauntlet AI"
+    description: "6-week intensive AI engineering training program"
+    website: "https://gauntlet.ai"
+    cohort: 4
+    
+    # Ideal candidate profile
+    ideal_candidate:
+      age_range: [24, 36]  # Mean ~30, SD ~6-7
+      experience_years: [2, 8]  # Sweet spot
+      salary_ceiling: 150000  # Likely to consider career change
+      
+    # Positive signals (weighted)
+    signals:
+      cs_degree:
+        weight: 0.20
+        sources: ["linkedin", "personal_site", "github_bio"]
+        keywords: ["computer science", "cs degree", "software engineering"]
+      engineering_experience:
+        weight: 0.20
+        sources: ["linkedin", "github", "resume"]
+        min_years: 2
+      public_ai_project:
+        weight: 0.25
+        sources: ["github", "huggingface", "streamlit"]
+        keywords: ["llm", "gpt", "agent", "langchain", "openai", "anthropic", "claude"]
+      build_in_public:
+        weight: 0.15
+        sources: ["substack", "medium", "twitter", "blog"]
+        keywords: ["built with", "learning in public", "side project"]
+      agent_tooling_curiosity:
+        weight: 0.10
+        sources: ["github", "blog"]
+        keywords: ["cursor", "copilot", "ai coding", "llm agent"]
+      salary_likely_under_150k:
+        weight: 0.10
+        indicators: ["startup", "non-FAANG", "midwest", "remote"]
+    
+    # Negative signals (disqualifiers)
+    disqualifiers:
+      - "FAANG senior with 300k+ comp"
+      - "10+ years deep in non-AI specialty"
+      - "No public technical work"
+      - "Currently in management track"
+    
+    # Query expansion templates
+    query_templates:
+      github:
+        - 'site:github.com "agent" "openai"'
+        - 'site:github.com "llm" "langchain"'
+        - 'site:github.com "streamlit" "gpt"'
+        - 'site:github.com "cursor" "ai"'
+      blogs:
+        - '"learning in public" ai'
+        - '"built with gpt" project'
+        - 'site:substack.com "llm" "building"'
+        - 'site:medium.com "ai agent" tutorial'
+      demos:
+        - 'site:huggingface.co/spaces personal'
+        - '"streamlit app" "openai"'
+        - '"gradio demo" llm'
+    
+    # Top CS programs (for education signal)
+    target_schools:
+      tier_1:
+        - MIT
+        - Stanford
+        - Carnegie Mellon
+        - UC Berkeley
+        - Georgia Tech
+        - University of Illinois
+        - University of Washington
+        - Cornell
+        - Caltech
+        - Princeton
+      tier_2:
+        - University of Michigan
+        - UCLA
+        - UT Austin
+        - Purdue
+        - UCSD
+        - University of Maryland
+        - Wisconsin-Madison
+        - Penn State
+        - Ohio State
+        - Virginia Tech
+    
+    # Companies that signal underpaid talent
+    undervalued_companies:
+      startups:
+        - "early stage startup"
+        - "seed stage"
+        - "Series A"
+        - "pre-revenue"
+      non_tech:
+        - "consulting"
+        - "agency"
+        - "non-profit"
+        - "government"
+      regions:
+        - "midwest"
+        - "southeast"
+        - "remote"
+

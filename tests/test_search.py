@@ -76,6 +76,25 @@ class TestExpandPromptToQueries:
         french_products = KEYWORD_PACKS["fr"]["products"]
         assert any(any(fp in q for fp in french_products) for q in queries)
 
+    def test_food_service_expansion(self) -> None:
+        """Test that food service prompts trigger restaurant/chain queries."""
+        queries = expand_prompt_to_queries("takeout containers Sint Maarten", {})
+        # Should include food service specific queries
+        assert any("restaurant chain" in q for q in queries)
+        assert any("supermarket chain" in q for q in queries)
+        # Should NOT include contractor queries (those are for building materials)
+        assert not any("construction company" in q for q in queries)
+        assert not any("general contractor commercial" in q for q in queries)
+
+    def test_food_service_no_contractor_bleed(self) -> None:
+        """Test that food service prompts don't get building material queries."""
+        queries = expand_prompt_to_queries("sushi containers restaurant Jamaica", {})
+        # Should NOT include construction-related queries
+        assert not any("hotel renovation contractor" in q for q in queries)
+        assert not any("builders association" in q for q in queries)
+        # But SHOULD include food industry queries
+        assert any("restaurant" in q.lower() for q in queries)
+
 
 class TestCaribbeanCountryLanguages:
     """Tests for country-language mapping."""

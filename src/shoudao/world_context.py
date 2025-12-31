@@ -215,3 +215,31 @@ class WorldContext:
             "languages": list(all_languages),
             "keywords": keywords_by_lang,
         }
+
+    def get_talent_program(self, program_name: str) -> dict[str, Any] | None:
+        """
+        Get talent program configuration (e.g., Gauntlet).
+
+        Returns program config including:
+        - ideal_candidate: age_range, experience_years, salary_ceiling
+        - signals: weighted signals with sources and keywords
+        - query_templates: category -> list of queries
+        - target_schools: tier_1, tier_2 lists
+        """
+        talent_programs = self._data.get("talent_programs", {})
+        return talent_programs.get(program_name)
+
+    def get_talent_signals(self, program_name: str) -> dict[str, Any]:
+        """Get signal definitions for a talent program."""
+        program = self.get_talent_program(program_name)
+        if program:
+            return program.get("signals", {})
+        return {}
+
+    def get_target_schools(self, program_name: str, tier: str = "tier_1") -> list[str]:
+        """Get target schools for a talent program."""
+        program = self.get_talent_program(program_name)
+        if program:
+            schools = program.get("target_schools", {})
+            return schools.get(tier, [])
+        return []

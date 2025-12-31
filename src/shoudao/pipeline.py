@@ -3,9 +3,16 @@ ShouDao pipeline - orchestrates the full prompt-to-CSV flow.
 Now includes sources.json for audit trail.
 """
 
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+# Force line buffering for immediate output (important on Windows/PowerShell)
+try:
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore
+except Exception:
+    pass  # Fallback for non-reconfigurable streams
 
 from .advisor import Advisor
 from .dedupe import (
@@ -17,6 +24,7 @@ from .dedupe import (
     score_all_leads,
 )
 from .exporter import (
+    CSV_COLUMNS,
     export_candidates_csv,
     export_candidates_excel,
     export_candidates_json,
@@ -25,11 +33,18 @@ from .exporter import (
     export_json,
     generate_report,
     generate_talent_report,
+    lead_to_row,
 )
 from .extractor import Extractor, TalentExtractor
 from .fetcher import Fetcher, FetcherConfig, dedupe_by_domain, filter_urls
 from .logger import ProgressLogger
 from .models import Candidate, Lead, RunConfig, RunResult, TalentRunResult
+from .parallel import (
+    IncrementalCSVWriter,
+    IncrementalJSONWriter,
+    parallel_advise,
+    parallel_extract,
+)
 from .search import expand_prompt_to_queries, expand_talent_queries, get_search_provider
 from .sources import SourcesLog
 
@@ -133,28 +148,32 @@ class Pipeline:
         result.domains_hit = len(set(r.url.split("/")[2] for r in successful))
         print(f"  Fetched {len(successful)}/{len(all_urls)} pages")
 
-        # Step 4: Extract leads
-        self.logger.phase("Extracting leads", f"Step 4/6 - {len(successful)} pages")
+        # Step 4: Extract leads (PARALLEL - Story 17.3)
+        self.logger.phase("Extracting leads", f"Step 4/6 - {len(successful)} pages (parallel)")
         extractor = Extractor()
-        all_leads: list[Lead] = []
-
-        for fetch_result in successful:
-            try:
-                extraction = extractor.extract(fetch_result, self.config.prompt)
-                leads = extractor.extraction_to_leads(extraction, fetch_result.url)
-                all_leads.extend(leads)
-
-                # Update sources log with extraction count
-                for url_rec in sources_log.urls_fetched:
-                    if url_rec.url == fetch_result.url:
-                        url_rec.leads_extracted = len(leads)
-                        break
-
-                if leads:
-                    print(f"  Found {len(leads)} lead(s) from {fetch_result.url[:60]}...")
-            except Exception as e:
-                result.errors.append(f"Extraction error: {e}")
-                print(f"  Extraction error: {e}")
+        
+        # Track extraction counts per URL for sources log
+        url_lead_counts: dict[str, int] = {}
+        
+        def on_lead_extracted(lead: Lead) -> None:
+            """Callback to track extraction counts."""
+            url = lead.extracted_from_url
+            if url:
+                url_lead_counts[url] = url_lead_counts.get(url, 0) + 1
+        
+        all_leads, extraction_errors = parallel_extract(
+            successful,
+            extractor,
+            self.config.prompt,
+            max_workers=5,  # Concurrent extractions
+            on_lead_extracted=on_lead_extracted,
+        )
+        result.errors.extend(extraction_errors)
+        
+        # Update sources log with extraction counts
+        for url_rec in sources_log.urls_fetched:
+            if url_rec.url in url_lead_counts:
+                url_rec.leads_extracted = url_lead_counts[url_rec.url]
 
         result.total_leads_extracted = len(all_leads)
         print(f"  Total raw leads: {len(all_leads)}")
@@ -174,43 +193,80 @@ class Pipeline:
         print(f"  Leads after dedupe: {pre_filter_count}")
         print(f"  Leads after buyer gate: {len(leads)} (dropped {filtered_count} non-buyers)")
 
-        # Step 6: Generate advice
-        self.logger.phase("Generating advice", f"Step 6/6 - {len(leads)} leads")
-        advisor = Advisor()
-        leads = advisor.advise_all(
-            leads,
-            product_context=self.config.product_context,
-            seller_context=self.config.seller_context,
-        )
-        print(f"  Advice generated for {len(leads)} leads")
-
-        # Cap at max_results (if configured), sorted by confidence
+        # Cap at max_results (if configured), sorted by confidence BEFORE advice
+        # This way we don't generate advice for leads we'll drop
         leads = sorted(leads, key=lambda lead: -lead.confidence)
         if self.config.max_results is not None:
             leads = leads[: self.config.max_results]
+
+        # Step 6: Generate advice (PARALLEL - Story 17.1)
+        # Also write incrementally (Story 17.2)
+        self.logger.phase("Generating advice", f"Step 6/6 - {len(leads)} leads (parallel)")
+        advisor = Advisor()
+
+        # Set up incremental writers if output_dir specified
+        run_dir = None
+        csv_writer = None
+        json_writer = None
+
+        if output_dir:
+            run_dir = output_dir / self.run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use context managers for incremental writes
+        if run_dir:
+            csv_path = run_dir / "leads.csv"
+            json_path = run_dir / "leads.json"
+            
+            with IncrementalCSVWriter(csv_path, CSV_COLUMNS) as csv_w, \
+                 IncrementalJSONWriter(json_path) as json_w:
+                
+                def on_advice_done(lead: Lead) -> None:
+                    """Write lead incrementally as advice completes."""
+                    csv_w.write_row(lead_to_row(lead))
+                    json_w.write_item(lead.model_dump(mode="json"))
+                
+                leads = parallel_advise(
+                    leads,
+                    advisor,
+                    product_context=self.config.product_context,
+                    seller_context=self.config.seller_context,
+                    max_workers=5,
+                    on_advice_generated=on_advice_done,
+                )
+            
+            print(f"  Advice generated for {len(leads)} leads (incremental write)")
+        else:
+            # No output dir - just generate advice
+            leads = parallel_advise(
+                leads,
+                advisor,
+                product_context=self.config.product_context,
+                seller_context=self.config.seller_context,
+                max_workers=5,
+            )
+            print(f"  Advice generated for {len(leads)} leads")
 
         result.leads = leads
         result.finished_at = datetime.now(UTC)
         sources_log.finish()
 
-        # Export outputs
-        if output_dir:
-            run_dir = output_dir / self.run_id
-            run_dir.mkdir(parents=True, exist_ok=True)
-
-            csv_path = run_dir / "leads.csv"
-            json_path = run_dir / "leads.json"
+        # Export remaining outputs (Excel + report are still batch)
+        if run_dir:
             report_path = run_dir / "report.md"
             sources_path = run_dir / "sources.json"
 
-            export_csv(leads, csv_path)
+            # Excel stays batch (library limitation)
+            print("  Writing Excel...", flush=True)
             export_excel(leads, run_dir / "leads.xlsx")
-            export_json(leads, json_path)
+            print("  Excel done. Generating report...", flush=True)
             generate_report(result, report_path)
+            print("  Report done. Saving sources...", flush=True)
             sources_log.save(sources_path)
+            print("  Sources done.", flush=True)
 
             self.logger.finish(len(leads), str(run_dir))
-            print(f"  CSV: {csv_path}")
+            print(f"  CSV: {run_dir / 'leads.csv'}")
             print(f"  Sources: {sources_path}")
 
         return result
