@@ -72,9 +72,7 @@ class Advisor:
         """Check if model supports GPT-5.x Responses API parameters."""
         return any(model.startswith(m) for m in self.GPT5_MODELS)
 
-    def _call_model(
-        self, model: str, system_prompt: str, user_prompt: str, response_format: type
-    ):
+    def _call_model(self, model: str, system_prompt: str, user_prompt: str, response_format: type):
         """Call the model with structured output. Returns parsed result or raises."""
         import json
 
@@ -85,7 +83,9 @@ class Advisor:
             response = self.client.responses.create(
                 model=model,
                 input=full_prompt,
-                text={"format": {"type": "json_schema", "schema": response_format.model_json_schema()}},
+                text={
+                    "format": {"type": "json_schema", "schema": response_format.model_json_schema()}
+                },
                 reasoning={"effort": "none"},
             )
             return response_format.model_validate(json.loads(response.output_text))
@@ -118,7 +118,9 @@ class Advisor:
         ]
         location = ", ".join(p for p in location_parts if p) or "Unknown"
 
-        system_prompt = "You are a B2B sales advisor. Generate specific, actionable outreach advice."
+        system_prompt = (
+            "You are a B2B sales advisor. Generate specific, actionable outreach advice."
+        )
         user_prompt = ADVICE_PROMPT.format(
             org_name=lead.organization.name,
             org_type=lead.organization.org_type,
@@ -142,7 +144,9 @@ class Advisor:
         except Exception as e:
             # If using default model and it failed, try fallback
             if self.model == self.DEFAULT_MODEL:
-                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                print(
+                    f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}"
+                )
                 try:
                     result = self._call_model(
                         self.FALLBACK_MODEL, system_prompt, user_prompt, AdviceOutput

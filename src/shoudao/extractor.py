@@ -154,9 +154,7 @@ class Extractor:
         """Check if model supports GPT-5.x Responses API parameters."""
         return any(model.startswith(m) for m in self.GPT5_MODELS)
 
-    def _call_model(
-        self, model: str, system_prompt: str, user_prompt: str, response_format: type
-    ):
+    def _call_model(self, model: str, system_prompt: str, user_prompt: str, response_format: type):
         """Call the model with structured output. Returns parsed result or raises.
 
         Uses Responses API for GPT-5.x models with:
@@ -171,11 +169,14 @@ class Extractor:
             response = self.client.responses.create(
                 model=model,
                 input=full_prompt,
-                text={"format": {"type": "json_schema", "schema": response_format.model_json_schema()}},
+                text={
+                    "format": {"type": "json_schema", "schema": response_format.model_json_schema()}
+                },
                 reasoning={"effort": "none"},
             )
             # Parse the JSON response into the Pydantic model
             import json
+
             return response_format.model_validate(json.loads(response.output_text))
         else:
             # Fallback to Chat Completions for older models (gpt-4o, etc.)
@@ -206,7 +207,9 @@ class Extractor:
         except Exception as e:
             # If using default model and it failed, try fallback
             if self.model == self.DEFAULT_MODEL:
-                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                print(
+                    f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}"
+                )
                 try:
                     return self._call_model(
                         self.FALLBACK_MODEL, system_prompt, user_prompt, ExtractionResult
@@ -654,9 +657,7 @@ class TalentExtractor:
         """Check if model supports GPT-5.x Responses API parameters."""
         return any(model.startswith(m) for m in self.GPT5_MODELS)
 
-    def _call_model(
-        self, model: str, system_prompt: str, user_prompt: str, response_format: type
-    ):
+    def _call_model(self, model: str, system_prompt: str, user_prompt: str, response_format: type):
         """Call the model with structured output. Returns parsed result or raises."""
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
@@ -665,10 +666,13 @@ class TalentExtractor:
             response = self.client.responses.create(
                 model=model,
                 input=full_prompt,
-                text={"format": {"type": "json_schema", "schema": response_format.model_json_schema()}},
+                text={
+                    "format": {"type": "json_schema", "schema": response_format.model_json_schema()}
+                },
                 reasoning={"effort": "none"},
             )
             import json
+
             return response_format.model_validate(json.loads(response.output_text))
         else:
             # Fallback to Chat Completions for older models
@@ -699,7 +703,9 @@ class TalentExtractor:
         except Exception as e:
             # If using default model and it failed, try fallback
             if self.model == self.DEFAULT_MODEL:
-                print(f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}")
+                print(
+                    f"Primary model ({self.model}) failed, trying fallback ({self.FALLBACK_MODEL}): {e}"
+                )
                 try:
                     return self._call_model(
                         self.FALLBACK_MODEL, system_prompt, user_prompt, TalentExtractionResult
