@@ -156,33 +156,33 @@ class Extractor:
 
     def _ensure_all_required(self, schema: dict) -> dict:
         """Recursively ensure all properties are in 'required' array at every level.
-        
+
         OpenAI strict mode requires this for all nested objects and $defs.
         """
         if not isinstance(schema, dict):
             return schema
-        
+
         # Fix $defs (where Pydantic puts nested model definitions)
         if "$defs" in schema:
             for def_name, def_schema in schema["$defs"].items():
                 schema["$defs"][def_name] = self._ensure_all_required(def_schema)
-        
+
         # Fix this level's properties
         if "properties" in schema:
             schema["required"] = list(schema["properties"].keys())
             # Recurse into each property
             for prop_name, prop_schema in schema["properties"].items():
                 schema["properties"][prop_name] = self._ensure_all_required(prop_schema)
-        
+
         # Handle arrays with items
         if "items" in schema:
             schema["items"] = self._ensure_all_required(schema["items"])
-        
+
         # Handle anyOf/oneOf (for Optional types)
         for key in ("anyOf", "oneOf"):
             if key in schema:
                 schema[key] = [self._ensure_all_required(s) for s in schema[key]]
-        
+
         return schema
 
     def _call_model(self, model: str, system_prompt: str, user_prompt: str, response_format: type):

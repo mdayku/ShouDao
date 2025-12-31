@@ -28,9 +28,7 @@ from .exporter import (
     export_candidates_csv,
     export_candidates_excel,
     export_candidates_json,
-    export_csv,
     export_excel,
-    export_json,
     generate_report,
     generate_talent_report,
     lead_to_row,
@@ -151,16 +149,16 @@ class Pipeline:
         # Step 4: Extract leads (PARALLEL - Story 17.3)
         self.logger.phase("Extracting leads", f"Step 4/6 - {len(successful)} pages (parallel)")
         extractor = Extractor()
-        
+
         # Track extraction counts per URL for sources log
         url_lead_counts: dict[str, int] = {}
-        
+
         def on_lead_extracted(lead: Lead) -> None:
             """Callback to track extraction counts."""
             url = lead.extracted_from_url
             if url:
                 url_lead_counts[url] = url_lead_counts.get(url, 0) + 1
-        
+
         all_leads, extraction_errors = parallel_extract(
             successful,
             extractor,
@@ -169,7 +167,7 @@ class Pipeline:
             on_lead_extracted=on_lead_extracted,
         )
         result.errors.extend(extraction_errors)
-        
+
         # Update sources log with extraction counts
         for url_rec in sources_log.urls_fetched:
             if url_rec.url in url_lead_counts:
@@ -206,8 +204,6 @@ class Pipeline:
 
         # Set up incremental writers if output_dir specified
         run_dir = None
-        csv_writer = None
-        json_writer = None
 
         if output_dir:
             run_dir = output_dir / self.run_id
@@ -217,15 +213,15 @@ class Pipeline:
         if run_dir:
             csv_path = run_dir / "leads.csv"
             json_path = run_dir / "leads.json"
-            
+
             with IncrementalCSVWriter(csv_path, CSV_COLUMNS) as csv_w, \
                  IncrementalJSONWriter(json_path) as json_w:
-                
+
                 def on_advice_done(lead: Lead) -> None:
                     """Write lead incrementally as advice completes."""
                     csv_w.write_row(lead_to_row(lead))
                     json_w.write_item(lead.model_dump(mode="json"))
-                
+
                 leads = parallel_advise(
                     leads,
                     advisor,
@@ -234,7 +230,7 @@ class Pipeline:
                     max_workers=5,
                     on_advice_generated=on_advice_done,
                 )
-            
+
             print(f"  Advice generated for {len(leads)} leads (incremental write)")
         else:
             # No output dir - just generate advice

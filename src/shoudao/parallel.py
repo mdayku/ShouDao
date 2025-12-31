@@ -11,10 +11,11 @@ import csv
 import json
 import sys
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from queue import Empty, Queue
-from typing import Any, Callable
+from queue import Queue
+from typing import Any
 
 # Force line buffering for immediate output
 try:
@@ -62,7 +63,7 @@ class IncrementalCSVWriter:
 
 class IncrementalJSONWriter:
     """Write JSON objects incrementally as leads come in (Story 17.2).
-    
+
     Uses JSON Lines format (one JSON object per line) for incremental writes.
     At close, rewrites as proper JSON array for compatibility.
     """
@@ -100,42 +101,42 @@ def parallel_extract(
 ) -> tuple[list, list[str]]:
     """
     Extract leads from pages in parallel (Story 17.3).
-    
+
     Args:
         fetch_results: List of FetchResult objects
         extractor: Extractor instance
         prompt: The search prompt
         max_workers: Max concurrent extractions (default 5)
         on_lead_extracted: Callback(lead) called for each extracted lead
-        
+
     Returns:
         Tuple of (all_leads, errors)
     """
     all_leads = []
     errors = []
     leads_lock = threading.Lock()
-    
+
     def extract_one(fetch_result):
         """Extract leads from a single page."""
         try:
             extraction = extractor.extract(fetch_result, prompt)
             leads = extractor.extraction_to_leads(extraction, fetch_result.url)
-            
+
             with leads_lock:
                 all_leads.extend(leads)
-            
+
             # Callback for each lead
             if on_lead_extracted and leads:
                 for lead in leads:
                     on_lead_extracted(lead)
-            
+
             return fetch_result.url, leads, None
         except Exception as e:
             return fetch_result.url, [], str(e)
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(extract_one, fr): fr for fr in fetch_results}
-        
+
         for future in as_completed(futures):
             url, leads, error = future.result()
             if error:
@@ -143,7 +144,7 @@ def parallel_extract(
                 print(f"  Extraction error: {error}", flush=True)
             elif leads:
                 print(f"  Found {len(leads)} lead(s) from {url[:60]}...", flush=True)
-    
+
     return all_leads, errors
 
 
@@ -157,7 +158,7 @@ def parallel_advise(
 ) -> list:
     """
     Generate advice for leads in parallel (Story 17.1).
-    
+
     Args:
         leads: List of Lead objects
         advisor: Advisor instance
@@ -165,50 +166,50 @@ def parallel_advise(
         seller_context: Seller description
         max_workers: Max concurrent advice generations
         on_advice_generated: Callback(lead) called after advice is generated
-        
+
     Returns:
         List of leads with advice attached
     """
     results_lock = threading.Lock()
     completed = [0]  # Use list for mutable closure
-    
+
     def advise_one(lead):
         """Generate advice for a single lead."""
         try:
             lead.advice = advisor.generate_advice(lead, product_context, seller_context)
         except Exception as e:
             print(f"  Advice error ({lead.organization.name}): {e}", flush=True)
-        
+
         with results_lock:
             completed[0] += 1
             if completed[0] % 10 == 0 or completed[0] == len(leads):
                 print(f"  Advice: {completed[0]}/{len(leads)} complete", flush=True)
-        
+
         if on_advice_generated:
             on_advice_generated(lead)
-        
+
         return lead
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(advise_one, lead) for lead in leads]
-        
+
         # Wait for all to complete
         for future in as_completed(futures):
             future.result()  # Raises if error
-    
+
     return leads
 
 
 class StreamingPipeline:
     """
     A streaming pipeline that processes leads as they come in.
-    
+
     Flow:
     1. Parallel extraction → leads queue
     2. Parallel advice generation (consumes from queue)
     3. Incremental writes (as leads complete)
     """
-    
+
     def __init__(
         self,
         extractor,
@@ -220,11 +221,11 @@ class StreamingPipeline:
         self.advisor = advisor
         self.extraction_workers = extraction_workers
         self.advice_workers = advice_workers
-        
+
         self._leads_queue: Queue = Queue()
         self._advised_leads: list = []
         self._lock = threading.Lock()
-    
+
     def process(
         self,
         fetch_results: list,
@@ -236,11 +237,11 @@ class StreamingPipeline:
     ) -> list:
         """
         Process fetch results through extraction and advice in parallel.
-        
+
         Returns list of advised leads.
         """
         from .dedupe import apply_buyer_gate, dedupe_all_contacts, dedupe_leads, score_all_leads
-        
+
         # Phase 1: Parallel extraction
         print("  [Parallel] Starting extraction...", flush=True)
         all_leads, errors = parallel_extract(
@@ -250,21 +251,21 @@ class StreamingPipeline:
             max_workers=self.extraction_workers,
         )
         print(f"  [Parallel] Extracted {len(all_leads)} raw leads", flush=True)
-        
+
         # Phase 2: Dedupe and score (must be sequential)
         leads = dedupe_leads(all_leads)
         leads = dedupe_all_contacts(leads)
         leads = apply_buyer_gate(leads)
         leads = score_all_leads(leads)
         print(f"  [Parallel] After dedupe/scoring: {len(leads)} leads", flush=True)
-        
+
         # Phase 3: Parallel advice with incremental writes
         def on_advice_done(lead):
             if csv_writer:
                 csv_writer.write_row(lead.to_csv_row())
             if json_writer:
                 json_writer.write_item(lead.model_dump())
-        
+
         print("  [Parallel] Starting advice generation...", flush=True)
         leads = parallel_advise(
             leads,
@@ -274,6 +275,7 @@ class StreamingPipeline:
             max_workers=self.advice_workers,
             on_advice_generated=on_advice_done,
         )
-        
+
         return leads
+
 

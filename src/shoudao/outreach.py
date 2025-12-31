@@ -21,7 +21,7 @@ import json
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -45,7 +45,7 @@ class DraftCandidate:
 
 def utc_now_iso() -> str:
     """Return current UTC time in ISO format."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def load_outreach_log(log_path: Path) -> dict[str, dict[str, str]]:
