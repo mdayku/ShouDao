@@ -246,3 +246,114 @@ def dedupe_by_domain(urls: list[str], max_per_domain: int = 3) -> list[str]:
             domain_counts[domain] = count + 1
 
     return result
+
+
+# Common contact page paths to discover
+CONTACT_PAGE_PATHS = [
+    "/contact",
+    "/contact-us",
+    "/contactus",
+    "/about",
+    "/about-us",
+    "/aboutus",
+    "/team",
+    "/our-team",
+    "/leadership",
+    "/management",
+    "/staff",
+    "/people",
+    "/company",
+    "/who-we-are",
+]
+
+
+def discover_contact_pages(base_url: str, fetcher: Fetcher | None = None) -> list[str]:
+    """
+    Discover contact-related pages for a given base URL.
+
+    Tries common paths like /contact, /about, /team to find pages
+    that might contain contact information.
+
+    Args:
+        base_url: The base website URL (e.g., https://example.com)
+        fetcher: Optional fetcher instance to check if pages exist
+
+    Returns:
+        List of discovered contact page URLs that exist
+    """
+    from urllib.parse import urljoin
+
+    # Normalize base URL
+    parsed = urlparse(base_url)
+    if not parsed.scheme:
+        base_url = f"https://{base_url}"
+        parsed = urlparse(base_url)
+
+    # Build base without path
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    # Generate candidate URLs
+    candidates = [urljoin(base, path) for path in CONTACT_PAGE_PATHS]
+
+    # If no fetcher provided, return all candidates
+    if fetcher is None:
+        return candidates
+
+    # Check which pages actually exist
+    discovered = []
+    for url in candidates:
+        result = fetcher.fetch(url)
+        if result.success and result.status_code == 200:
+            # Check for minimum content (not just a redirect or error page)
+            if len(result.text) > 500:
+                discovered.append(url)
+
+    return discovered
+
+
+def extract_contact_links_from_html(html: str, base_url: str) -> list[str]:
+    """
+    Extract contact-related links from HTML content.
+
+    Looks for anchor tags with text/href containing contact-related keywords.
+
+    Args:
+        html: The HTML content to parse
+        base_url: Base URL for resolving relative links
+
+    Returns:
+        List of contact-related URLs found in the page
+    """
+    from urllib.parse import urljoin
+
+    soup = BeautifulSoup(html, "lxml")
+    contact_keywords = {
+        "contact",
+        "about",
+        "team",
+        "staff",
+        "people",
+        "leadership",
+        "management",
+        "company",
+        "who we are",
+    }
+
+    found_urls = set()
+
+    for link in soup.find_all("a", href=True):
+        href = link.get("href", "")
+        text = link.get_text(strip=True).lower()
+
+        # Check if link text or href contains contact keywords
+        href_lower = href.lower()
+        is_contact_link = any(kw in href_lower or kw in text for kw in contact_keywords)
+
+        if is_contact_link:
+            # Resolve relative URLs
+            full_url = urljoin(base_url, href)
+            # Only include same-domain links
+            if urlparse(full_url).netloc == urlparse(base_url).netloc:
+                found_urls.add(full_url)
+
+    return list(found_urls)

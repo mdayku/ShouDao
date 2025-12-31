@@ -374,11 +374,28 @@ shoudao talent --linkedin --linkedin-mode Full --prompt "ML engineers"
 - Only publicly listed contact info
 - Gauntlet staff handles all outreach
 
-### Upcoming — v0.7.0 GitHub API Integration (Planned)
-**Goal:** Integrate GitHub API for better repo/commit/star signals.
+### 2025-12-30 — v0.7.0 GitHub API + Epic Completion
+**Goal:** Complete GitHub integration and finish remaining MVP epics.
 
-**Key changes:**
-- GitHub API client with token auth
-- Extract repos, stars, languages, commit frequency
-- Identify AI/LLM repos (keywords: agent, llm, openai, langchain)
-- Rate limit handling (5000 req/hr with token)
+**Built:**
+- **GitHub API Integration** — `GitHubProvider` class with token auth
+  - Extract repos, stars, languages, commit frequency
+  - AI/LLM repo detection (keywords: agent, llm, openai, langchain)
+  - `calculate_ai_signal_score()` and `calculate_build_in_public_score()`
+  - Rate limit handling (5000 req/hr with token)
+
+- **Epic 5 Complete — Extraction Rules:**
+  - Task 5.3.1: Contact page discovery (`discover_contact_pages()`, `extract_contact_links_from_html()`)
+  - Task 5.3.2: Rule-based signal merging (`extract_rule_based_signals()`, `merge_rule_signals_into_lead()`)
+
+- **Epic 6 Complete — Compliance:**
+  - Task 6.2.2: Opt-out lists (`opt_out_companies`, `opt_out_domains` fields, `filter_opt_out_leads()`)
+
+**New CLI options:**
+```bash
+shoudao talent --linkedin --prompt "..." --location "USA" --profile-language "en"
+shoudao github  # Check GitHub API configuration
+shoudao reprocess <run_id>  # Re-score existing candidates
+```
+
+**Epics Complete:** 1, 2, 3, 4, 5, 6, 7, 8, 14, 15 (Core MVP done)

@@ -10,6 +10,7 @@ Key design:
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -405,6 +406,100 @@ def extract_phones_regex(text: str) -> list[str]:
     """Extract phone numbers using regex (fallback)."""
     phones = PHONE_REGEX.findall(text)
     return [p for p in phones if len(p.replace(" ", "").replace("-", "")) >= 7]
+
+
+# =============================================================================
+# RULE-BASED SIGNAL EXTRACTION AND MERGING
+# =============================================================================
+
+
+@dataclass
+class RuleBasedSignals:
+    """Signals extracted via regex/rules (fallback for LLM)."""
+
+    emails: list[str]
+    phones: list[str]
+    github_urls: list[str]
+    linkedin_urls: list[str]
+    twitter_urls: list[str]
+
+
+def extract_rule_based_signals(text: str) -> RuleBasedSignals:
+    """
+    Extract contact signals using regex/rules.
+
+    This runs as a fallback to LLM extraction, catching emails/phones
+    that the LLM may have missed.
+
+    Args:
+        text: Raw text content to extract from
+
+    Returns:
+        RuleBasedSignals with all found contact channels
+    """
+    return RuleBasedSignals(
+        emails=extract_emails_regex(text),
+        phones=extract_phones_regex(text),
+        github_urls=extract_github_urls_regex(text),
+        linkedin_urls=extract_linkedin_urls_regex(text),
+        twitter_urls=extract_twitter_urls_regex(text),
+    )
+
+
+def merge_rule_signals_into_lead(
+    lead: Lead,
+    signals: RuleBasedSignals,
+    source_url: str,
+) -> Lead:
+    """
+    Merge rule-based signals into an existing LLM-extracted lead.
+
+    Strategy:
+    - Add emails/phones not already in lead's contacts
+    - Associate new channels with evidence from source_url
+    - Don't create new contacts, just enrich existing ones
+
+    Args:
+        lead: The LLM-extracted lead to enrich
+        signals: Rule-based signals to merge
+        source_url: Source URL for evidence
+
+    Returns:
+        Enriched lead with merged signals
+    """
+    # Collect existing channels from all contacts
+    existing_emails: set[str] = set()
+    existing_phones: set[str] = set()
+
+    for contact in lead.contacts:
+        for channel in contact.channels:
+            if channel.type == "email":
+                existing_emails.add(channel.value.lower())
+            elif channel.type == "phone":
+                existing_phones.add(channel.value)
+
+    # Find new signals
+    new_emails = [e for e in signals.emails if e.lower() not in existing_emails]
+    new_phones = [p for p in signals.phones if p not in existing_phones]
+
+    # If we have new signals and at least one contact, add to first contact
+    if (new_emails or new_phones) and lead.contacts:
+        evidence = Evidence(
+            url=source_url,  # type: ignore
+            snippet="Extracted via regex fallback",
+        )
+
+        first_contact = lead.contacts[0]
+        for email in new_emails[:3]:  # Cap at 3 new emails
+            first_contact.channels.append(
+                ContactChannel(type="email", value=email, evidence=[evidence])
+            )
+        for phone in new_phones[:2]:  # Cap at 2 new phones
+            first_contact.channels.append(
+                ContactChannel(type="phone", value=phone, evidence=[evidence])
+            )
+
+    return lead
 
 
 # =============================================================================

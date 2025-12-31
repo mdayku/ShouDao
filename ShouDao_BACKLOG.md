@@ -153,7 +153,7 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 
 ---
 
-## Epic 5 — Extraction (LLM + rules) (P0) ✅ DONE
+## Epic 5 — Extraction (LLM + rules) (P0) ✅ COMPLETE
 
 ### Story 5.1 — LLM extraction contract
 - [x] Task 5.1.1: Define strict JSON schema (Pydantic, extra="forbid")
@@ -168,12 +168,12 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 - [x] Task 5.2.4: Email/phone regex fallback extractor
 
 ### Story 5.3 — Rules-based fallbacks
-- [ ] Task 5.3.1: Contact page discovery (about/contact/team paths)
-- [ ] Task 5.3.2: Merge rule-based signals with LLM output
+- [x] Task 5.3.1: Contact page discovery — `discover_contact_pages()` in `fetcher.py`
+- [x] Task 5.3.2: Merge rule-based signals — `merge_rule_signals_into_lead()` in `extractor.py`
 
 ---
 
-## Epic 6 — Evidence + Compliance Guardrails (P1) ✅ DONE
+## Epic 6 — Evidence + Compliance Guardrails (P1) ✅ COMPLETE
 
 ### Story 6.1 — Evidence enforcement
 - [x] Task 6.1.1: Require evidence URL per contact channel (ContactChannel model)
@@ -182,7 +182,7 @@ shoudao talent --linkedin --prompt "software engineers AI" --max-results 25
 
 ### Story 6.2 — Crawl policy controls
 - [x] Task 6.2.1: Blocklist by domain — `blocked_domains` in RunConfig/Recipe
-- [ ] Task 6.2.2: Opt-out list (company names/domains) — not yet implemented
+- [x] Task 6.2.2: Opt-out list — `opt_out_companies/domains` + `filter_opt_out_leads()` in dedupe.py
 - [x] Task 6.2.3: Per-run crawl caps — `max_pages` in Recipe
 
 ---

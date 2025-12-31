@@ -196,6 +196,68 @@ def dedupe_leads(leads: list[Lead]) -> list[Lead]:
     return list(by_key.values())
 
 
+# =============================================================================
+# OPT-OUT FILTERING (Task 6.2.2)
+# =============================================================================
+
+
+def filter_opt_out_leads(
+    leads: list[Lead],
+    opt_out_companies: list[str] | None = None,
+    opt_out_domains: list[str] | None = None,
+) -> tuple[list[Lead], list[Lead]]:
+    """
+    Filter out leads that match opt-out lists.
+
+    Args:
+        leads: List of leads to filter
+        opt_out_companies: Company names to exclude (case-insensitive)
+        opt_out_domains: Domains to exclude
+
+    Returns:
+        Tuple of (kept_leads, filtered_out_leads)
+    """
+    if not opt_out_companies and not opt_out_domains:
+        return leads, []
+
+    # Normalize opt-out lists
+    company_blocklist = {c.lower().strip() for c in (opt_out_companies or [])}
+    domain_blocklist = {d.lower().strip() for d in (opt_out_domains or [])}
+
+    kept = []
+    filtered_out = []
+
+    for lead in leads:
+        # Check company name
+        org_name = lead.organization.name.lower().strip()
+        if org_name in company_blocklist:
+            filtered_out.append(lead)
+            continue
+
+        # Check partial company name match
+        if any(blocked in org_name for blocked in company_blocklist if len(blocked) > 3):
+            filtered_out.append(lead)
+            continue
+
+        # Check domain
+        domain = lead.dedupe_key or ""
+        if domain.lower() in domain_blocklist:
+            filtered_out.append(lead)
+            continue
+
+        # Check if domain ends with any blocked domain
+        if any(
+            domain.lower().endswith(f".{blocked}") or domain.lower() == blocked
+            for blocked in domain_blocklist
+        ):
+            filtered_out.append(lead)
+            continue
+
+        kept.append(lead)
+
+    return kept, filtered_out
+
+
 def is_caribbean_country(country: str | None) -> bool:
     """Check if a country is in the Caribbean whitelist."""
     if not country:

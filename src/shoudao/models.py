@@ -434,6 +434,16 @@ class RunConfig(BaseModel):
     seed_sources: list[str] = Field(default_factory=list)
     blocked_domains: list[str] = Field(default_factory=list)
 
+    # Opt-out lists (compliance)
+    opt_out_companies: list[str] = Field(
+        default_factory=list,
+        description="Company names to exclude from results (case-insensitive)",
+    )
+    opt_out_domains: list[str] = Field(
+        default_factory=list,
+        description="Domains to exclude from results (e.g., 'example.com')",
+    )
+
     # Limits
     max_results: int | None = Field(
         default=50,
