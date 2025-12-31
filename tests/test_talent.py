@@ -237,9 +237,21 @@ class TestClassifyCandidateTier:
         """High salary candidate might be demoted even with strong signals."""
         faang_candidate.confidence = 0.7
         faang_candidate.estimated_salary_band = "200k_plus"
+        # Must also lower AI signal to test salary demotion path
+        # (high AI signal can override salary concerns)
+        faang_candidate.ai_signal_score = 0.3
         tier = classify_candidate_tier(faang_candidate)
-        # High salary with high score should be B (not A due to salary)
+        # High salary + low AI signal with decent score should be B (not A)
         assert tier == "B"
+
+    def test_high_ai_signal_overrides_salary(self, faang_candidate: Candidate) -> None:
+        """Strong AI builders may take pay cut - AI signal overrides salary concerns."""
+        faang_candidate.confidence = 0.7
+        faang_candidate.estimated_salary_band = "200k_plus"
+        faang_candidate.ai_signal_score = 0.8  # Strong AI builder
+        tier = classify_candidate_tier(faang_candidate)
+        # High AI signal overrides high salary - still Tier A
+        assert tier == "A"
 
 
 class TestDedupeCandidates:
@@ -289,3 +301,160 @@ class TestDedupeCandidates:
         )
         unique = dedupe_candidates([c1, c2])
         assert len(unique) == 2
+
+
+class TestOptOutFiltering:
+    """Tests for opt-out list filtering."""
+
+    def test_filter_by_company_name(self) -> None:
+        """Leads with opt-out company names should be filtered."""
+        from shoudao.dedupe import filter_opt_out_leads
+        from shoudao.models import Evidence, Lead, Organization
+
+        evidence = Evidence(url="https://example.com", snippet="Test")
+        lead1 = Lead(
+            organization=Organization(name="Good Company", evidence=[evidence]),
+            contacts=[],
+            evidence=[evidence],
+        )
+        lead2 = Lead(
+            organization=Organization(name="Bad Company", evidence=[evidence]),
+            contacts=[],
+            evidence=[evidence],
+        )
+
+        kept, filtered = filter_opt_out_leads(
+            [lead1, lead2],
+            opt_out_companies=["bad company"],
+        )
+        assert len(kept) == 1
+        assert len(filtered) == 1
+        assert kept[0].organization.name == "Good Company"
+
+    def test_filter_by_domain(self) -> None:
+        """Leads with opt-out domains should be filtered."""
+        from shoudao.dedupe import filter_opt_out_leads
+        from shoudao.models import Evidence, Lead, Organization
+
+        evidence = Evidence(url="https://example.com", snippet="Test")
+        lead1 = Lead(
+            organization=Organization(name="Good Corp", evidence=[evidence]),
+            contacts=[],
+            evidence=[evidence],
+            dedupe_key="goodcorp.com",
+        )
+        lead2 = Lead(
+            organization=Organization(name="Bad Corp", evidence=[evidence]),
+            contacts=[],
+            evidence=[evidence],
+            dedupe_key="badcorp.com",
+        )
+
+        kept, filtered = filter_opt_out_leads(
+            [lead1, lead2],
+            opt_out_domains=["badcorp.com"],
+        )
+        assert len(kept) == 1
+        assert len(filtered) == 1
+
+    def test_no_opt_out_returns_all(self) -> None:
+        """With no opt-out lists, all leads should be returned."""
+        from shoudao.dedupe import filter_opt_out_leads
+        from shoudao.models import Evidence, Lead, Organization
+
+        evidence = Evidence(url="https://example.com", snippet="Test")
+        leads = [
+            Lead(
+                organization=Organization(name="Company A", evidence=[evidence]),
+                contacts=[],
+                evidence=[evidence],
+            ),
+            Lead(
+                organization=Organization(name="Company B", evidence=[evidence]),
+                contacts=[],
+                evidence=[evidence],
+            ),
+        ]
+
+        kept, filtered = filter_opt_out_leads(leads)
+        assert len(kept) == 2
+        assert len(filtered) == 0
+
+
+class TestContactPageDiscovery:
+    """Tests for contact page discovery functions."""
+
+    def test_discover_contact_pages_returns_candidates(self) -> None:
+        """Should return candidate URLs for common contact paths."""
+        from shoudao.fetcher import discover_contact_pages
+
+        candidates = discover_contact_pages("https://example.com")
+        assert len(candidates) > 0
+        assert any("/contact" in url for url in candidates)
+        assert any("/about" in url for url in candidates)
+
+    def test_extract_contact_links_from_html(self) -> None:
+        """Should extract contact-related links from HTML."""
+        from shoudao.fetcher import extract_contact_links_from_html
+
+        html = """
+        <html>
+        <body>
+            <a href="/about">About Us</a>
+            <a href="/contact">Contact</a>
+            <a href="/products">Products</a>
+            <a href="/team">Our Team</a>
+        </body>
+        </html>
+        """
+        links = extract_contact_links_from_html(html, "https://example.com")
+        assert any("/about" in link for link in links)
+        assert any("/contact" in link for link in links)
+        assert any("/team" in link for link in links)
+        # Products should not be included
+        assert not any("/products" in link for link in links)
+
+
+class TestRuleBasedSignals:
+    """Tests for rule-based signal extraction."""
+
+    def test_extract_rule_based_signals(self) -> None:
+        """Should extract emails and phones via regex."""
+        from shoudao.extractor import extract_rule_based_signals
+
+        text = """
+        Contact us at info@company.com or sales@company.com.
+        Phone: +1 555-123-4567
+        Visit https://github.com/company for our code.
+        """
+        signals = extract_rule_based_signals(text)
+        assert len(signals.emails) >= 2
+        assert "info@company.com" in signals.emails
+        assert len(signals.phones) >= 1
+        assert len(signals.github_urls) >= 1
+
+    def test_extract_emails_regex(self) -> None:
+        """Should extract valid emails (filters out @example)."""
+        from shoudao.extractor import extract_emails_regex
+
+        # Note: @example emails are filtered out by the extractor
+        text = "Contact jane@testmail.com or bob@company.org for info"
+        emails = extract_emails_regex(text)
+        assert "jane@testmail.com" in emails
+        assert "bob@company.org" in emails
+
+    def test_extract_emails_filters_example(self) -> None:
+        """Should filter out @example emails."""
+        from shoudao.extractor import extract_emails_regex
+
+        text = "Contact test@example.com for testing"
+        emails = extract_emails_regex(text)
+        assert "test@example.com" not in emails
+
+    def test_extract_phones_regex(self) -> None:
+        """Should extract phone numbers."""
+        from shoudao.extractor import extract_phones_regex
+
+        text = "Call us: 555-123-4567 or (800) 555-0000"
+        phones = extract_phones_regex(text)
+        assert len(phones) >= 1
